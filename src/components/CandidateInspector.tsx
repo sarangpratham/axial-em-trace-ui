@@ -111,16 +111,13 @@ export function CandidateInspector({ candidates }: Props) {
               <th>#</th>
               <th>Entity ID</th>
               <th>Candidate</th>
-              <th>Phase</th>
               <th>Type</th>
               <th>URL Status</th>
-              <th>Score</th>
               <th>Result</th>
             </tr>
           </thead>
           <tbody>
             {displayedCandidates.map((c, i) => {
-              const s = scores[c.candidate_id] ?? 0;
               const rankCls = i === 0 ? 'rank-badge--winner' : i < 3 ? 'rank-badge--top' : '';
               return (
                 <tr
@@ -135,11 +132,6 @@ export function CandidateInspector({ candidates }: Props) {
                   <td className="name-cell" title={c.candidate_name}>
                     {c.candidate_name || c.candidate_id}
                   </td>
-                  <td>
-                    <span style={{ color: 'var(--text3)', fontSize: '10px' }}>
-                      {c.match_phase || '—'}
-                    </span>
-                  </td>
                   <td className="type-cell">
                     <span style={{ fontSize: '10px' }}>
                       {c.match_type?.replace(/_/g, ' ') || '—'}
@@ -149,22 +141,6 @@ export function CandidateInspector({ candidates }: Props) {
                     <span style={{ color: 'var(--text3)', fontSize: '10px' }}>
                       {c.url_status || '—'}
                     </span>
-                  </td>
-                  <td style={{ minWidth: 100 }}>
-                    <div className="score-bar">
-                      <div className="score-bar-track">
-                        <div
-                          className="score-bar-fill"
-                          style={{
-                            width: `${Math.round(s * 100)}%`,
-                            background: scoreColor(s),
-                          }}
-                        />
-                      </div>
-                      <span className="score-val" style={{ color: scoreColor(s) }}>
-                        {s.toFixed(2)}
-                      </span>
-                    </div>
                   </td>
                   <td>
                     <StatusBadge label={c.is_match ? 'master_match' : 'no_match'} />
@@ -218,7 +194,7 @@ export function CandidateInspector({ candidates }: Props) {
             <EvidenceRow label="Matched Tgt" value={selected.matched_target_name} />
           </div>
           <div className="reason-block">
-            {selected.context_reason || 'No reasoning captured for this candidate.'}
+            {selected.context_reason || 'No reasoning captured.'}
           </div>
         </div>
       )}
