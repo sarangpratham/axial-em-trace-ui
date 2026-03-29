@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { TraceDetail } from '../types';
+import { AnomalyList } from './AnomalyList';
 
 type Props = {
   detail: TraceDetail;
@@ -123,6 +124,17 @@ export function DecisionPipeline({ detail }: Props) {
           />
           <DrawerRow label="Method" value={String(outcome?.method ?? '—')} />
         </div>
+      ),
+    },
+    {
+      label: 'Anomalies',
+      name: `${detail.anomaly_count || 0} detected`,
+      detail: detail.anomaly_count ? 'Review required' : 'None',
+      status: detail.anomaly_count ? 'warn' : 'ok',
+      colorVar: 'var(--red)',
+      cardClass: detail.anomaly_count ? 'stage-card--anomaly' : '',
+      drawerContent: (
+        <AnomalyList anomalies={detail.anomalies || []} />
       ),
     },
   ];

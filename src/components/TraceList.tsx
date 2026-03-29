@@ -2,6 +2,15 @@ import { useDeferredValue } from 'react';
 import type { TraceSummary } from '../types';
 import { StatusBadge } from './StatusBadge';
 
+function AnomalyBadge({ count, severity }: { count: number; severity?: string }) {
+  if (!count) return null;
+  return (
+    <span className={`badge badge--anomaly badge--severity-${severity || 'medium'}`}>
+      ⚠ {count}
+    </span>
+  );
+}
+
 type Props = {
   traces: TraceSummary[];
   selectedTraceId?: string;
@@ -44,6 +53,9 @@ export function TraceList({ traces, selectedTraceId, onSelect }: Props) {
                 {trace.candidate_count} cands · {trace.matched_candidate_count} pos
               </span>
               {trace.winner_origin && <StatusBadge label={trace.winner_origin} />}
+              {trace.has_anomalies && (
+                <AnomalyBadge count={trace.anomaly_count || 0} severity={trace.anomaly_severity || undefined} />
+              )}
             </div>
           </button>
         );

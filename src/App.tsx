@@ -234,6 +234,21 @@ export default function App() {
               <span className="stat-dot" />
               <span className="num">{summary.no_match_count}</span> no match
             </div>
+            {summary.anomaly_total && summary.anomaly_total > 0 && (
+              <>
+                <div className="stat-divider" />
+                <div className="stat-pill stat-pill--anomaly">
+                  <span className="stat-dot" style={{ background: 'var(--red)' }} />
+                  <span className="num">{summary.anomaly_total}</span> anomalies
+                </div>
+                {summary.anomaly_by_severity &&
+                  Object.entries(summary.anomaly_by_severity).map(([sev, cnt]) => (
+                    <div key={sev} className={`stat-pill stat-pill--severity-${sev}`}>
+                      <span className="num">{cnt}</span> {sev}
+                    </div>
+                  ))}
+              </>
+            )}
           </div>
         )}
       </header>

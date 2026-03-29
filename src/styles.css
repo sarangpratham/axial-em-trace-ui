@@ -310,7 +310,7 @@ code {
   padding: 10px 12px;
   transition: background 100ms, border-color 100ms;
   position: relative;
-  overflow: hidden;
+  /* overflow: hidden; */
 }
 
 .trace-row:hover {
@@ -974,6 +974,16 @@ table.ctable {
   white-space: nowrap;
 }
 
+.ctable .entity-id-cell {
+  font-family: var(--font-mono);
+  color: var(--cyan);
+  font-size: 10px;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ctable .type-cell {
   max-width: 120px;
   overflow: hidden;
@@ -1238,4 +1248,94 @@ table.ctable {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--cyan);
+}
+
+/* ── Anomalies ───────────────────────────────────────────────────────── */
+:root {
+  --anomaly-bg: rgba(255, 71, 87, 0.1);
+  --anomaly-border: rgba(255, 71, 87, 0.3);
+}
+
+.badge--anomaly {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+.badge--severity-critical {
+  background: #ff0;
+  color: #000;
+}
+.badge--severity-high {
+  background: var(--red-dim);
+  color: var(--red);
+}
+.badge--severity-medium {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+.badge--severity-low {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+}
+
+.stage-card--anomaly {
+  border-color: var(--anomaly-border) !important;
+  background: var(--anomaly-bg) !important;
+}
+
+.anomaly-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.anomaly-table th {
+  text-align: left;
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px;
+  border-bottom: 1px solid var(--border2);
+}
+.anomaly-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.anomaly-type {
+  font-family: var(--font-mono);
+  color: var(--cyan);
+  font-size: 10px;
+}
+.anomaly-severity {
+  text-transform: capitalize;
+  font-size: 10px;
+}
+.anomaly-reason {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text);
+}
+.anomaly-details-toggle {
+  cursor: pointer;
+  color: var(--cyan);
+  font-size: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.anomaly-details-toggle:hover {
+  color: var(--text);
+}
+
+/* Trace list row anomaly badge placement */
+.trace-row .badge--anomaly {
+  margin-left: 6px;
+  margin-right: 4px;
 }

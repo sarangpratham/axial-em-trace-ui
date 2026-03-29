@@ -1,6 +1,6 @@
-import type { RunSummary, TraceDetail, TraceSummary } from '../types';
+import type { RunSummary, TraceDetail, TraceSummary, AnomalyRecord } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`);
@@ -38,4 +38,23 @@ export function getTraceDetail(runId: string, sourceModule: string, sourceUnique
   return request<TraceDetail>(
     `/traces/${encodeURIComponent(runId)}/${encodeURIComponent(sourceModule)}/${encodeURIComponent(sourceUniqueId)}`,
   );
+}
+
+export function getAnomalies(params: {
+  runId: string;
+  sourceModule?: string;
+  sourceUniqueId?: string;
+  anomalyType?: string;
+  severity?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const search = new URLSearchParams({ run_id: params.runId });
+  if (params.sourceModule) search.set('source_module', params.sourceModule);
+  if (params.sourceUniqueId) search.set('source_unique_id', params.sourceUniqueId);
+  if (params.anomalyType) search.set('anomaly_type', params.anomalyType);
+  if (params.severity) search.set('severity', params.severity);
+  if (params.limit) search.set('limit', String(params.limit));
+  if (params.offset) search.set('offset', String(params.offset));
+  return request<AnomalyRecord[]>(`/anomalies?${search.toString()}`);
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useLayoutEffect, useEffect } from 'react';
 import type { CandidateEvaluation } from '../types';
 import { StatusBadge } from './StatusBadge';
 
@@ -36,10 +36,28 @@ function EvidenceRow({ label, value, url }: EvidenceRowProps) {
   );
 }
 
+const CHUNK_SIZE = 100;
+
 export function CandidateInspector({ candidates }: Props) {
   const [selectedId, setSelectedId] = useState<string>(
     candidates[0]?.candidate_id ?? '',
   );
+  const [visibleCount, setVisibleCount] = useState(CHUNK_SIZE);
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const evidenceRef = useRef<HTMLDivElement>(null);
+
+  // Synchronize table height with evidence pane
+  useLayoutEffect(() => {
+    if (!evidenceRef.current) return;
+    const updateTableHeight = () => {
+      if (!tableWrapRef.current) return;
+      const height = evidenceRef.current!.offsetHeight;
+      tableWrapRef.current.style.setProperty('--evidence-height', `${height}px`);
+    };
+    updateTableHeight();
+    window.addEventListener('resize', updateTableHeight);
+    return () => window.removeEventListener('resize', updateTableHeight);
+  }, [candidates.length]); // Re-run if evidence content changes
 
   const scores = useMemo(
     () =>
@@ -48,6 +66,25 @@ export function CandidateInspector({ candidates }: Props) {
       ),
     [candidates],
   );
+
+  const displayedCandidates = candidates.slice(0, visibleCount);
+  const hasMore = visibleCount < candidates.length;
+
+  // Incremental rendering: gradually show more candidates on initial load
+  useEffect(() => {
+    if (candidates.length > CHUNK_SIZE && visibleCount < CHUNK_SIZE) {
+      const timer = setInterval(() => {
+        setVisibleCount((prev) => {
+          if (prev >= candidates.length) {
+            clearInterval(timer);
+            return prev;
+          }
+          return Math.min(prev + CHUNK_SIZE, candidates.length);
+        });
+      }, 100);
+      return () => clearInterval(timer);
+    }
+  }, [candidates.length]);
 
   const selected = useMemo(
     () => candidates.find((c) => c.candidate_id === selectedId) ?? candidates[0],
@@ -67,11 +104,12 @@ export function CandidateInspector({ candidates }: Props) {
   return (
     <div className="candidate-wrap">
       {/* Table */}
-      <div className="ctable-wrap">
+      <div className="ctable-wrap" ref={tableWrapRef} style={{ maxHeight: 'var(--evidence-height)', overflowY: 'auto' }}>
         <table className="ctable">
           <thead>
             <tr>
               <th>#</th>
+              <th>Entity ID</th>
               <th>Candidate</th>
               <th>Phase</th>
               <th>Type</th>
@@ -81,7 +119,7 @@ export function CandidateInspector({ candidates }: Props) {
             </tr>
           </thead>
           <tbody>
-            {candidates.map((c, i) => {
+            {displayedCandidates.map((c, i) => {
               const s = scores[c.candidate_id] ?? 0;
               const rankCls = i === 0 ? 'rank-badge--winner' : i < 3 ? 'rank-badge--top' : '';
               return (
@@ -93,6 +131,7 @@ export function CandidateInspector({ candidates }: Props) {
                   <td>
                     <span className={`rank-badge ${rankCls}`}>{i + 1}</span>
                   </td>
+                  <td className="entity-id-cell">{c.candidate_id}</td>
                   <td className="name-cell" title={c.candidate_name}>
                     {c.candidate_name || c.candidate_id}
                   </td>
@@ -135,11 +174,29 @@ export function CandidateInspector({ candidates }: Props) {
             })}
           </tbody>
         </table>
+        {hasMore && (
+          <div style={{ textAlign: 'center', padding: '10px' }}>
+            <button
+              onClick={() => setVisibleCount(prev => Math.min(prev + CHUNK_SIZE, candidates.length))}
+              style={{
+                background: 'var(--bg3)',
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+                borderRadius: '4px',
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontSize: '11px',
+              }}
+            >
+              Load more…
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Evidence pane */}
       {selected && (
-        <div className="evidence-pane">
+        <div className="evidence-pane" ref={evidenceRef}>
           <div className="evidence-pane-head">
             <div className="evidence-pane-name" title={selected.candidate_name}>
               {selected.candidate_name || selected.candidate_id}
