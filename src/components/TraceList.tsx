@@ -11,13 +11,18 @@ function AnomalyBadge({ count, severity }: { count: number; severity?: string })
   );
 }
 
+function formatAnomalyType(value: string) {
+  return value.split('_').join(' ');
+}
+
 type Props = {
   traces: TraceSummary[];
   selectedTraceId?: string;
+  activeAnomalyType?: string;
   onSelect: (trace: TraceSummary) => void;
 };
 
-export function TraceList({ traces, selectedTraceId, onSelect }: Props) {
+export function TraceList({ traces, selectedTraceId, activeAnomalyType, onSelect }: Props) {
   const deferredTraces = useDeferredValue(traces);
 
   if (!deferredTraces.length) {
@@ -55,6 +60,9 @@ export function TraceList({ traces, selectedTraceId, onSelect }: Props) {
               {trace.winner_origin && <StatusBadge label={trace.winner_origin} />}
               {trace.has_anomalies && (
                 <AnomalyBadge count={trace.anomaly_count || 0} severity={trace.anomaly_severity || undefined} />
+              )}
+              {activeAnomalyType && trace.anomaly_types?.includes(activeAnomalyType) && (
+                <span className="trace-anomaly-type-pill">{formatAnomalyType(activeAnomalyType)}</span>
               )}
             </div>
           </button>

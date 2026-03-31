@@ -8,8 +8,8 @@ export type TraceExplorerState = ReturnType<typeof useTraceExplorerState>;
 
 export function useTraceExplorerState() {
   const [params, setParams] = useSearchParams();
-  const [searchInput, setSearchInput] = useState(params.get('q') ?? '');
   const [jsonOpen, setJsonOpen] = useState(false);
+  const searchInput = params.get('q') ?? '';
   const deferredSearch = useDeferredValue(searchInput);
 
   const runsQuery = useQuery({ queryKey: ['runs'], queryFn: getRuns });
@@ -17,14 +17,16 @@ export function useTraceExplorerState() {
   const moduleFilter = params.get('module') ?? '';
   const statusFilter = params.get('final_status') ?? '';
   const originFilter = params.get('winner_origin') ?? '';
+  const anomalyPresenceParam = params.get('has_anomalies');
+  const anomalyTypeFilter = params.get('anomaly_type') ?? '';
   const selectedModule = params.get('selected_module') ?? '';
   const selectedUniqueId = params.get('selected_unique_id') ?? '';
-
-  useEffect(() => {
-    if (searchInput !== (params.get('q') ?? '')) {
-      setSearchInput(params.get('q') ?? '');
-    }
-  }, [params, searchInput]);
+  const anomalyPresenceFilter =
+    anomalyTypeFilter || anomalyPresenceParam === 'true'
+      ? 'with'
+      : anomalyPresenceParam === 'false'
+        ? 'clean'
+        : 'all';
 
   useEffect(() => {
     if (!selectedRunId && runsQuery.data?.[0]) {
@@ -36,15 +38,6 @@ export function useTraceExplorerState() {
     }
   }, [runsQuery.data, selectedRunId, setParams]);
 
-  useEffect(() => {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      if (searchInput) next.set('q', searchInput);
-      else next.delete('q');
-      return next;
-    });
-  }, [searchInput, setParams]);
-
   const summaryQuery = useQuery({
     queryKey: ['summary', selectedRunId],
     queryFn: () => getRunSummary(selectedRunId),
@@ -52,7 +45,16 @@ export function useTraceExplorerState() {
   });
 
   const tracesQuery = useQuery({
-    queryKey: ['traces', selectedRunId, moduleFilter, statusFilter, originFilter, deferredSearch],
+    queryKey: [
+      'traces',
+      selectedRunId,
+      moduleFilter,
+      statusFilter,
+      originFilter,
+      deferredSearch,
+      anomalyPresenceParam,
+      anomalyTypeFilter,
+    ],
     queryFn: () =>
       getTraces({
         runId: selectedRunId,
@@ -60,9 +62,32 @@ export function useTraceExplorerState() {
         finalStatus: statusFilter || undefined,
         winnerOrigin: originFilter || undefined,
         query: deferredSearch || undefined,
+        hasAnomalies:
+          anomalyPresenceFilter === 'with'
+            ? true
+            : anomalyPresenceFilter === 'clean'
+              ? false
+              : undefined,
+        anomalyType: anomalyTypeFilter || undefined,
       }),
     enabled: Boolean(selectedRunId),
   });
+
+  const availableAnomalyTypes = useMemo(() => {
+    const entries = Object.entries(summaryQuery.data?.anomaly_by_type ?? {});
+    return entries.sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  }, [summaryQuery.data?.anomaly_by_type]);
+
+  useEffect(() => {
+    if (!anomalyTypeFilter) return;
+    if (availableAnomalyTypes.some(([type]) => type === anomalyTypeFilter)) return;
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('anomaly_type');
+      if (next.get('has_anomalies') === 'true') next.delete('has_anomalies');
+      return next;
+    });
+  }, [anomalyTypeFilter, availableAnomalyTypes, setParams]);
 
   const selectedTrace = useMemo(() => {
     return (
@@ -129,6 +154,40 @@ export function useTraceExplorerState() {
     });
   };
 
+  const setSearchInput = (value: string) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value) next.set('q', value);
+      else next.delete('q');
+      return next;
+    });
+  };
+
+  const setAnomalyPresenceFilter = (value: 'all' | 'with' | 'clean') => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value === 'with') next.set('has_anomalies', 'true');
+      else if (value === 'clean') next.set('has_anomalies', 'false');
+      else next.delete('has_anomalies');
+
+      if (value === 'clean') next.delete('anomaly_type');
+      return next;
+    });
+  };
+
+  const setAnomalyTypeFilter = (value: string) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value) {
+        next.set('anomaly_type', value);
+        next.set('has_anomalies', 'true');
+      } else {
+        next.delete('anomaly_type');
+      }
+      return next;
+    });
+  };
+
   const selectTrace = (trace: TraceSummary) => {
     setJsonOpen(false);
     setParams((current) => {
@@ -152,6 +211,9 @@ export function useTraceExplorerState() {
     moduleFilter,
     statusFilter,
     originFilter,
+    anomalyPresenceFilter,
+    anomalyTypeFilter,
+    availableAnomalyTypes,
     selectedModule,
     selectedUniqueId,
     summaryQuery,
@@ -167,6 +229,8 @@ export function useTraceExplorerState() {
     isNew,
     selectedTraceKey,
     updateParam,
+    setAnomalyPresenceFilter,
+    setAnomalyTypeFilter,
     selectTrace,
   };
 }

@@ -6,6 +6,15 @@ import { TraceList } from '../components/TraceList';
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
 
 const MODULE_OPTIONS = ['news', 'linkedin', 'portfolio'];
+const ANOMALY_PRESENCE_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'with', label: 'With' },
+  { value: 'clean', label: 'Clean' },
+] as const;
+
+function formatAnomalyLabel(value: string) {
+  return value.split('_').join(' ');
+}
 
 function JsonHighlight({ data }: { data: unknown }) {
   const highlighted = JSON.stringify(data, null, 2)
@@ -21,7 +30,21 @@ function JsonHighlight({ data }: { data: unknown }) {
 }
 
 function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
-  const { runsQuery, selectedRunId, updateParam, searchInput, setSearchInput, moduleFilter, statusFilter, summary } = explorer;
+  const {
+    runsQuery,
+    selectedRunId,
+    updateParam,
+    searchInput,
+    setSearchInput,
+    moduleFilter,
+    statusFilter,
+    summary,
+    anomalyPresenceFilter,
+    anomalyTypeFilter,
+    availableAnomalyTypes,
+    setAnomalyPresenceFilter,
+    setAnomalyTypeFilter,
+  } = explorer;
 
   return (
     <section className="explorer-toolbar">
@@ -66,6 +89,45 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
             <option value="incoming_second_pass_match">second_pass</option>
             <option value="new_entity_created">new_entity</option>
             <option value="no_match">no_match</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="explorer-anomaly-rail">
+        <div className="explorer-anomaly-group">
+          <span className="topbar-filter-label">Anomalies</span>
+          <div className="anomaly-segmented-control" role="group" aria-label="Anomaly presence filter">
+            {ANOMALY_PRESENCE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`anomaly-segment${anomalyPresenceFilter === option.value ? ' anomaly-segment--active' : ''}${
+                  option.value === 'with' ? ' anomaly-segment--warn' : option.value === 'clean' ? ' anomaly-segment--clean' : ''
+                }`}
+                onClick={() => setAnomalyPresenceFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="explorer-anomaly-group">
+          <span className="topbar-filter-label">Type</span>
+          <select
+            className="topbar-select explorer-anomaly-select"
+            value={anomalyTypeFilter}
+            onChange={(event) => setAnomalyTypeFilter(event.target.value)}
+            disabled={anomalyPresenceFilter === 'clean' || availableAnomalyTypes.length === 0}
+          >
+            <option value="">
+              {availableAnomalyTypes.length > 0 ? 'all anomaly types' : 'no anomaly types'}
+            </option>
+            {availableAnomalyTypes.map(([type, count]) => (
+              <option key={type} value={type}>
+                {formatAnomalyLabel(type)} ({count})
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -153,7 +215,12 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
               Failed to load traces
             </div>
           ) : (
-            <TraceList traces={traces} selectedTraceId={selectedTraceKey} onSelect={selectTrace} />
+            <TraceList
+              traces={traces}
+              selectedTraceId={selectedTraceKey}
+              activeAnomalyType={explorer.anomalyTypeFilter}
+              onSelect={selectTrace}
+            />
           )}
         </aside>
 

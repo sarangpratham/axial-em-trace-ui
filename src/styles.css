@@ -154,6 +154,75 @@ code {
   flex-wrap: wrap;
 }
 
+.explorer-anomaly-rail {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 71, 87, 0.12);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(90deg, rgba(255, 71, 87, 0.06), rgba(255, 176, 32, 0.03)),
+    var(--bg2);
+}
+
+.explorer-anomaly-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.explorer-anomaly-select {
+  min-width: 220px;
+}
+
+.anomaly-segmented-control {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--border2);
+  background: rgba(255, 255, 255, 0.03);
+  gap: 2px;
+}
+
+.anomaly-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--text2);
+  font-size: 11px;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.anomaly-segment:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.anomaly-segment--active {
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--text);
+}
+
+.anomaly-segment--active.anomaly-segment--warn {
+  background: rgba(255, 71, 87, 0.12);
+  color: #ff8f99;
+}
+
+.anomaly-segment--active.anomaly-segment--clean {
+  background: rgba(0, 229, 160, 0.1);
+  color: var(--green);
+}
+
 /* ── Topbar ─────────────────────────────────────────────────────────── */
 .topbar {
   display: flex;
@@ -464,6 +533,19 @@ code {
 .tr-counts {
   font-size: 10px;
   color: var(--text3);
+}
+
+.trace-anomaly-type-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: #ffb9c0;
+  background: rgba(255, 71, 87, 0.1);
+  border: 1px solid rgba(255, 71, 87, 0.18);
+  white-space: nowrap;
 }
 
 /* ── Status Badges ──────────────────────────────────────────────────── */
@@ -2273,6 +2355,21 @@ table.ctable {
   .analysis-drawer--left,
   .analysis-drawer--right {
     width: calc(100vw - 12px);
+  }
+
+  .explorer-anomaly-rail {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .explorer-anomaly-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .explorer-anomaly-select {
+    min-width: 0;
+    width: 100%;
   }
 }
 

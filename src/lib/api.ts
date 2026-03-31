@@ -25,12 +25,16 @@ export function getTraces(params: {
   finalStatus?: string;
   winnerOrigin?: string;
   query?: string;
+  hasAnomalies?: boolean;
+  anomalyType?: string;
 }) {
   const search = new URLSearchParams({ run_id: params.runId, limit: '500', offset: '0' });
   if (params.module) search.set('module', params.module);
   if (params.finalStatus) search.set('final_status', params.finalStatus);
   if (params.winnerOrigin) search.set('winner_origin', params.winnerOrigin);
-  if (params.query) search.set('q', params.query);
+  if (params.query?.trim()) search.set('q', params.query.trim());
+  if (params.hasAnomalies != null) search.set('has_anomalies', String(params.hasAnomalies));
+  if (params.anomalyType) search.set('anomaly_type', params.anomalyType);
   return request<TraceSummary[]>(`/traces?${search.toString()}`);
 }
 
