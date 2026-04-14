@@ -85,7 +85,9 @@ export function DecisionPipeline({ detail }: Props) {
             label="Candidates"
             value={String(Array.isArray(s.potential_candidates) ? s.potential_candidates.length : 0)}
           />
-          <DrawerRow label="Query" value={String(s.redis_query ?? '—')} mono />
+          {typeof s.redis_query === 'string' && s.redis_query.trim() && (
+            <DrawerRow label="Query" value={String(s.redis_query)} mono />
+          )}
         </div>
       ),
     })),

@@ -4,9 +4,11 @@ import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
 
 const STORAGE_KEY = 'axial-analysis-ui:analysis-user-key';
 
-export const ANALYSIS_CHAT_API_URL = import.meta.env.VITE_ANALYSIS_CHAT_API_URL || 'http://localhost:5003/api/v1/analysis-chat';
-export const ANALYSIS_THREADS_API_URL = import.meta.env.VITE_ANALYSIS_THREADS_API_URL || 'http://localhost:5003/api/v1/analysis-threads';
-export const ANALYSIS_API_KEY = import.meta.env.VITE_ANALYSIS_API_KEY || '';
+const INSIGHTS_API_BASE_URL =
+  import.meta.env.VITE_INSIGHTS_API_BASE_URL || 'http://localhost:5003/api/v1';
+
+export const ANALYSIS_CHAT_API_URL = `${INSIGHTS_API_BASE_URL}/chat/stream`;
+export const ANALYSIS_THREADS_API_URL = `${INSIGHTS_API_BASE_URL}/chat/threads`;
 
 export const ANALYSIS_STARTER_PROMPTS = [
   'Summarize anomalies in this run',
@@ -30,11 +32,18 @@ export function useAnalysisUserKey() {
 }
 
 export function createAnalysisContextSnapshot(explorer: TraceExplorerState) {
+  const graphFocusKind = explorer.params.get('graph_focus_kind');
+  const graphFocusId = explorer.params.get('graph_focus_id');
+  const selectedAssignedEntityId =
+    explorer.selectedTrace?.winner_entity_id || explorer.detail?.winner_entity_id || null;
+  const selectedAssignedEntityName =
+    explorer.selectedTrace?.winner_entity_name || explorer.detail?.winner_entity_name || null;
+
   return {
     currentRun: explorer.selectedRunId
       ? {
           runId: explorer.selectedRunId,
-          route: 'analysis',
+          route: 'chat',
         }
       : null,
     selectedTrace: explorer.selectedTrace
@@ -44,24 +53,37 @@ export function createAnalysisContextSnapshot(explorer: TraceExplorerState) {
           sourceUniqueId: explorer.selectedTrace.source_unique_id,
           sourceEntityName: explorer.selectedTrace.source_entity_name,
           finalStatus: explorer.selectedTrace.final_status,
-          winnerEntityId: explorer.selectedTrace.winner_entity_id,
-          winnerEntityName: explorer.selectedTrace.winner_entity_name,
+          assignedEntityId: selectedAssignedEntityId,
+          assignedEntityName: selectedAssignedEntityName,
         }
       : null,
+    selectedCluster:
+      graphFocusKind === 'cluster' && graphFocusId
+        ? {
+            runId: explorer.selectedRunId,
+            clusterId: graphFocusId.replace(/^cluster:/, ''),
+          }
+        : null,
+    selectedEdge:
+      graphFocusKind === 'edge' && graphFocusId
+        ? {
+            runId: explorer.selectedRunId,
+            edgeKey: graphFocusId,
+          }
+        : null,
+    selectedMaster:
+      graphFocusKind === 'master' && graphFocusId
+        ? {
+            runId: explorer.selectedRunId,
+            entityId: graphFocusId.replace(/^master:/, ''),
+          }
+        : null,
     visibleFilters: {
       module: explorer.moduleFilter || null,
       finalStatus: explorer.statusFilter || null,
       query: explorer.searchInput || null,
     },
   };
-}
-
-function requestHeaders() {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (ANALYSIS_API_KEY) {
-    headers['X-Api-Key'] = ANALYSIS_API_KEY;
-  }
-  return headers;
 }
 
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -73,39 +95,43 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
 }
 
 export async function fetchAnalysisThreads(userKey: string, cursor?: string) {
-  const url = new URL(`${ANALYSIS_THREADS_API_URL}/get`);
+  const url = new URL(ANALYSIS_THREADS_API_URL);
   url.searchParams.set('userKey', userKey);
   if (cursor) url.searchParams.set('cursor', cursor);
-  return requestJson<{ threads: Thread[]; nextCursor?: string }>(url.toString(), { headers: requestHeaders() });
+  return requestJson<{ threads: Thread[]; nextCursor?: string }>(url.toString(), {
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 export async function createAnalysisThread(userKey: string, firstMessage: UserMessage, context: ReturnType<typeof createAnalysisContextSnapshot>) {
-  return requestJson<Thread>(`${ANALYSIS_THREADS_API_URL}/create`, {
+  return requestJson<Thread>(ANALYSIS_THREADS_API_URL, {
     method: 'POST',
-    headers: requestHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userKey, messages: [firstMessage], context }),
   });
 }
 
 export async function loadAnalysisThread(userKey: string, threadId: string) {
-  const url = new URL(`${ANALYSIS_THREADS_API_URL}/get/${encodeURIComponent(threadId)}`);
+  const url = new URL(`${ANALYSIS_THREADS_API_URL}/${encodeURIComponent(threadId)}`);
   url.searchParams.set('userKey', userKey);
-  const payload = await requestJson<{ thread: Thread; messages: Message[] }>(url.toString(), { headers: requestHeaders() });
+  const payload = await requestJson<{ thread: Thread; messages: Message[] }>(url.toString(), {
+    headers: { 'Content-Type': 'application/json' },
+  });
   return payload.messages;
 }
 
 export async function updateAnalysisThread(userKey: string, thread: Thread) {
-  return requestJson<Thread>(`${ANALYSIS_THREADS_API_URL}/update/${encodeURIComponent(thread.id)}`, {
+  return requestJson<Thread>(`${ANALYSIS_THREADS_API_URL}/${encodeURIComponent(thread.id)}`, {
     method: 'PATCH',
-    headers: requestHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userKey, title: thread.title }),
   });
 }
 
 export async function deleteAnalysisThread(userKey: string, threadId: string) {
-  const url = new URL(`${ANALYSIS_THREADS_API_URL}/delete/${encodeURIComponent(threadId)}`);
+  const url = new URL(`${ANALYSIS_THREADS_API_URL}/${encodeURIComponent(threadId)}`);
   url.searchParams.set('userKey', userKey);
-  await fetch(url, { method: 'DELETE', headers: requestHeaders() });
+  await fetch(url, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
 }
 
 export async function sendAnalysisMessage({
@@ -123,7 +149,7 @@ export async function sendAnalysisMessage({
 }) {
   return fetch(ANALYSIS_CHAT_API_URL, {
     method: 'POST',
-    headers: requestHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       threadId,
       userKey,

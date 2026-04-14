@@ -1,6 +1,10 @@
 # Decision Tracer UI
 
-A fast, dark-mode entity matching decision explorer for dev/QA teams.
+A run inspector for entity matching with three views:
+
+- `Explorer` for the existing deterministic record-by-record flow
+- `Chat` for the AI-assisted postmortem workspace
+- `Graph` for a preview-first graph view of source records, clusters, and masters
 
 ## Setup
 
@@ -14,18 +18,17 @@ npm run dev
 Create a local `.env` file with:
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000/api/v1
-VITE_TAMBO_API_KEY=replace-with-your-tambo-project-api-key
-VITE_TAMBO_URL=http://localhost:8261
+VITE_INSIGHTS_API_BASE_URL=http://localhost:5003/api/v1
 ```
 
-`VITE_TAMBO_API_KEY` comes from your self-hosted Tambo project. `VITE_TAMBO_URL`
-should point at the self-hosted Tambo API service.
+- `VITE_INSIGHTS_API_BASE_URL` is used by Explorer, Chat, and Graph.
 
 ## Routes
 
 - `/explorer` keeps the existing deterministic decision explorer
-- `/analysis` adds the new Tambo-powered postmortem analysis workspace
+- `/chat` keeps the existing analysis workspace UI, relabeled as Chat
+- `/graph` adds the new preview-first graph workspace
+- `/analysis` remains as a redirect to `/chat` for compatibility
 
 ## Build
 

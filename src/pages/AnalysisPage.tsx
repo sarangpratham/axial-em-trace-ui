@@ -96,16 +96,15 @@ function SetupState({ explorer }: { explorer: TraceExplorerState }) {
   return (
     <div className="analysis-shell">
       <AppTopbar
-        currentView="analysis"
-        search={window.location.search}
-        statusSlot={<span className="topbar-status-chip">OpenUI setup</span>}
+        currentView="chat"
+        statusSlot={<span className="topbar-status-chip">Chat setup</span>}
       />
       <div className="analysis-workspace analysis-workspace--empty">
         <section className="analysis-empty-card">
           <div className="analysis-empty-icon">⌘</div>
-          <h2>Analysis API endpoints required</h2>
+          <h2>Chat API endpoint required</h2>
           <p>
-            Add <code>VITE_ANALYSIS_CHAT_API_URL</code> and <code>VITE_ANALYSIS_THREADS_API_URL</code> to your local <code>.env</code> file if you are not using the default localhost paths.
+            Add <code>VITE_INSIGHTS_API_BASE_URL</code> to your local <code>.env</code> file if you are not using the default localhost path.
           </p>
           {explorer.selectedRunId && <p>Current run context is ready: <code>{explorer.selectedRunId}</code></p>}
         </section>
@@ -213,7 +212,7 @@ function ThreadRail({
     <div className="analysis-sidebar">
       <div className="analysis-rail-head">
         <div>
-          <div className="analysis-rail-label">Analysis Threads</div>
+          <div className="analysis-rail-label">Chat Threads</div>
           <div className="analysis-rail-sub">run · {selectedRunId || 'not selected'}</div>
         </div>
         <div className="analysis-rail-head-actions">
@@ -382,9 +381,8 @@ function AnalysisWorkspace({ explorer, userKey }: { explorer: TraceExplorerState
   return (
     <div className="analysis-shell">
       <AppTopbar
-        currentView="analysis"
-        search={window.location.search}
-        statusSlot={<span className="topbar-status-chip">{currentThread?.title || explorer.selectedRunId || 'OpenUI analysis'}</span>}
+        currentView="chat"
+        statusSlot={<span className="topbar-status-chip">{currentThread?.title || explorer.selectedRunId || 'AI chat'}</span>}
       />
 
       <div className="analysis-workspace">
@@ -440,7 +438,7 @@ function AnalysisWorkspace({ explorer, userKey }: { explorer: TraceExplorerState
           <main className="analysis-chat-panel">
             <div className="analysis-chat-head">
               <div>
-                <div className="analysis-rail-label">Analysis Chat</div>
+                <div className="analysis-rail-label">Chat</div>
                 <div className="analysis-rail-sub">OpenUI + backend-persisted history for browser user {userKey.slice(-8)}</div>
               </div>
               {threadError && <span className="analysis-pill">error · {threadError.message}</span>}

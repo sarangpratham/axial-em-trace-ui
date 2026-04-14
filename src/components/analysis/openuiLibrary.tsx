@@ -66,7 +66,7 @@ function InlineEmptyState({ label }: { label: string }) {
 const RunSummaryCardSchema = z.object({
   runId: z.string(),
   notes: z.string().optional(),
-  metrics: z.array(metricSchema).default([]),
+  metrics: z.array(metricSchema).optional(),
 });
 
 const RunSummaryCard = defineComponent({
@@ -103,7 +103,7 @@ const RunSummaryCard = defineComponent({
 
 const TraceSearchResultsSchema = z.object({
   title: z.string().optional(),
-  results: z.array(traceRowSchema).default([]),
+  results: z.array(traceRowSchema).optional(),
 });
 
 const TraceSearchResults = defineComponent({
@@ -171,8 +171,8 @@ const TraceEvidencePanelSchema = z.object({
     matchPhase: z.string().optional(),
     matchType: z.string().optional(),
   }).optional(),
-  citations: z.array(citationSchema).default([]),
-  anomalies: z.array(anomalyItemSchema).default([]),
+  citations: z.array(citationSchema).optional(),
+  anomalies: z.array(anomalyItemSchema).optional(),
 });
 
 const TraceEvidencePanel = defineComponent({
@@ -235,7 +235,7 @@ const TraceEvidencePanel = defineComponent({
 
 const AnomalySummaryPanelSchema = z.object({
   title: z.string().optional(),
-  items: z.array(z.union([anomalyItemSchema, anomalyMetricItemSchema])).default([]),
+  items: z.array(z.union([anomalyItemSchema, anomalyMetricItemSchema])).optional(),
 });
 
 const AnomalySummaryPanel = defineComponent({
@@ -289,8 +289,8 @@ const MasterEntityPanelSchema = z.object({
   entityUrl: z.string().optional(),
   industry: z.string().optional(),
   activity: z.string().optional(),
-  aliases: z.array(z.string()).default([]),
-  relatedEntities: z.array(relatedEntitySchema).default([]),
+  aliases: z.array(z.string()).optional(),
+  relatedEntities: z.array(relatedEntitySchema).optional(),
 });
 
 const MasterEntityPanel = defineComponent({
@@ -346,7 +346,7 @@ const MasterEntityPanel = defineComponent({
 const UtilityResultCardSchema = z.object({
   title: z.string(),
   summary: z.string().optional(),
-  rows: z.array(utilityRowSchema).default([]),
+  rows: z.array(utilityRowSchema).optional(),
 });
 
 const UtilityResultCard = defineComponent({
