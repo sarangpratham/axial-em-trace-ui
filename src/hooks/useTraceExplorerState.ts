@@ -372,6 +372,12 @@ export function useTraceExplorerState() {
     setSelectedUniqueId(trace.source_unique_id);
   };
 
+  const openSourceRecord = (sourceModule: string, sourceUniqueId: string) => {
+    setJsonOpen(false);
+    setSelectedModule(sourceModule);
+    setSelectedUniqueId(sourceUniqueId);
+  };
+
   const setReviewTab = (value: string) => {
     setReviewTabState(value);
     setSelectedReviewCaseId('');
@@ -424,5 +430,6 @@ export function useTraceExplorerState() {
     setReviewTab,
     selectReviewCase,
     selectTrace,
+    openSourceRecord,
   };
 }

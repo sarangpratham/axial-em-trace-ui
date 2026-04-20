@@ -151,7 +151,9 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
     <div className="shell shell--review">
       <AppTopbar
         currentView="review"
-        statusSlot={<span className="topbar-status-chip" title={selectedRunId}>Run {selectedRunId || 'not selected'}</span>}
+        runIds={explorer.runsQuery.data ?? []}
+        selectedRunId={explorer.selectedRunId}
+        onRunChange={(runId) => explorer.updateParam('run_id', runId)}
       />
 
       <div className="review-page-shell">

@@ -1,10 +1,11 @@
 import { useMemo, useState, useRef, useLayoutEffect, useEffect } from 'react';
-import type { CandidateEvaluation } from '../types';
+import type { CandidateEvaluation, SourceEvaluationContext } from '../types';
 import { candidateDispositionLabel, humanizeToken } from '../lib/sourceResolution';
 import { StatusBadge } from './StatusBadge';
 
 type Props = {
   candidates: CandidateEvaluation[];
+  evaluationContext?: SourceEvaluationContext;
 };
 
 function scoreForCandidate(cand: CandidateEvaluation, idx: number, total: number): number {
@@ -40,7 +41,7 @@ function candidateSelectionKey(candidate: CandidateEvaluation, index: number) {
   return `${candidate.candidate_entity_id}:${candidate.match_phase || 'candidate'}:${index}`;
 }
 
-export function CandidateInspector({ candidates }: Props) {
+export function CandidateInspector({ candidates, evaluationContext }: Props) {
   const [selectedKey, setSelectedKey] = useState<string>(
     candidates[0] ? candidateSelectionKey(candidates[0], 0) : '',
   );
@@ -48,7 +49,6 @@ export function CandidateInspector({ candidates }: Props) {
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const evidenceRef = useRef<HTMLDivElement>(null);
 
-  // Synchronize table height with evidence pane
   useLayoutEffect(() => {
     if (!evidenceRef.current) return;
     const updateTableHeight = () => {
@@ -59,7 +59,7 @@ export function CandidateInspector({ candidates }: Props) {
     updateTableHeight();
     window.addEventListener('resize', updateTableHeight);
     return () => window.removeEventListener('resize', updateTableHeight);
-  }, [candidates.length]); // Re-run if evidence content changes
+  }, [candidates.length]);
 
   const scores = useMemo(
     () =>
@@ -80,7 +80,6 @@ export function CandidateInspector({ candidates }: Props) {
     setVisibleCount(CHUNK_SIZE);
   }, [candidates]);
 
-  // Incremental rendering: gradually show more candidates on initial load
   useEffect(() => {
     if (candidates.length > CHUNK_SIZE && visibleCount < CHUNK_SIZE) {
       const timer = setInterval(() => {
@@ -115,7 +114,6 @@ export function CandidateInspector({ candidates }: Props) {
 
   return (
     <div className="candidate-wrap">
-      {/* Table */}
       <div className="ctable-wrap" ref={tableWrapRef} style={{ maxHeight: 'var(--evidence-height)', overflowY: 'auto' }}>
         <table className="ctable">
           <thead>
@@ -182,7 +180,6 @@ export function CandidateInspector({ candidates }: Props) {
         )}
       </div>
 
-      {/* Evidence pane */}
       {selected && (
         <div className="evidence-pane" ref={evidenceRef}>
           <div className="evidence-pane-head">
@@ -194,7 +191,9 @@ export function CandidateInspector({ candidates }: Props) {
             </span>
           </div>
           <div className="evidence-rows">
-            <EvidenceRow label="URL" value={selected.candidate_entity_url} url />
+            <EvidenceRow label="Source URL at Eval" value={evaluationContext?.source_url_at_evaluation} url />
+            <EvidenceRow label="Current Source URL" value={evaluationContext?.current_source_url} url />
+            <EvidenceRow label="Candidate URL" value={selected.candidate_entity_url} url />
             <EvidenceRow label="Candidate ID" value={selected.candidate_entity_id} />
             <EvidenceRow label="Evaluation Score" value={score.toFixed(2)} />
             <EvidenceRow label="Phase" value={selected.match_phase} />
@@ -210,9 +209,10 @@ export function CandidateInspector({ candidates }: Props) {
             <EvidenceRow label="Suppression Reason" value={humanizeToken(selected.suppression_reason)} />
             <EvidenceRow label="Name Match Type" value={humanizeToken(selected.name_match_type)} />
             <EvidenceRow label="URL Decision" value={humanizeToken(selected.url_decision)} />
+            <EvidenceRow label="URL Skip Context" value={humanizeToken(evaluationContext?.url_matching_skipped_reason)} />
           </div>
           <div className="reason-block">
-            {selected.agent_reason || 'No reasoning captured.'}
+            {selected.agent_reason || 'No agent reasoning was captured for this candidate.'}
           </div>
         </div>
       )}

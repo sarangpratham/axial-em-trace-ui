@@ -11,6 +11,9 @@ const AnalysisPage = lazy(async () => ({
 const ReviewPage = lazy(async () => ({
   default: (await import('./pages/ReviewPage')).ReviewPage,
 }));
+const AnomaliesPage = lazy(async () => ({
+  default: (await import('./pages/AnomaliesPage')).AnomaliesPage,
+}));
 const NotFoundPage = lazy(async () => ({
   default: (await import('./pages/NotFoundPage')).NotFoundPage,
 }));
@@ -35,6 +38,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<ExplorerRedirect />} />
         <Route path="/explorer" element={<ExplorerPage explorer={explorer} />} />
+        <Route path="/anomalies" element={<AnomaliesPage explorer={explorer} />} />
         <Route path="/chat" element={<AnalysisPage explorer={explorer} />} />
         <Route path="/review" element={<ReviewPage explorer={explorer} />} />
         <Route path="*" element={<NotFoundPage />} />

@@ -96,6 +96,9 @@ function SetupState({ explorer }: { explorer: TraceExplorerState }) {
     <div className="analysis-shell">
       <AppTopbar
         currentView="chat"
+        runIds={explorer.runsQuery.data ?? []}
+        selectedRunId={explorer.selectedRunId}
+        onRunChange={(runId) => explorer.updateParam('run_id', runId)}
         statusSlot={<span className="topbar-status-chip">Chat setup</span>}
       />
       <div className="analysis-workspace analysis-workspace--empty">
@@ -364,6 +367,9 @@ function AnalysisWorkspace({ explorer }: { explorer: TraceExplorerState }) {
     <div className="analysis-shell">
       <AppTopbar
         currentView="chat"
+        runIds={explorer.runsQuery.data ?? []}
+        selectedRunId={explorer.selectedRunId}
+        onRunChange={(runId) => explorer.updateParam('run_id', runId)}
         statusSlot={<span className="topbar-status-chip">{currentThread?.title || explorer.selectedRunId || 'AI chat'}</span>}
       />
 

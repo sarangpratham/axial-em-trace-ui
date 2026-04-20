@@ -5,14 +5,20 @@ import { useTheme } from '../theme';
 export function AppTopbar({
   currentView,
   statusSlot,
+  runIds,
+  selectedRunId,
+  onRunChange,
 }: {
-  currentView: 'explorer' | 'chat' | 'review';
+  currentView: 'explorer' | 'anomalies' | 'chat' | 'review';
   statusSlot?: ReactNode;
+  runIds?: string[];
+  selectedRunId?: string;
+  onRunChange?: (runId: string) => void;
 }) {
   const { mode, toggleMode } = useTheme();
 
   return (
-    <header className="topbar">
+    <header className={`topbar topbar--${currentView}`}>
       <div className="topbar-main">
         <div className="topbar-logo">
           <div className="topbar-logo-icon">⚡</div>
@@ -26,6 +32,9 @@ export function AppTopbar({
           <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/explorer">
             Explorer
           </NavLink>
+          <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/anomalies">
+            Anomalies
+          </NavLink>
           <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/chat">
             Chat
           </NavLink>
@@ -36,6 +45,24 @@ export function AppTopbar({
       </div>
 
       <div className="topbar-status">
+        {runIds && runIds.length > 0 && onRunChange && (
+          <label className="topbar-run-picker">
+            <span className="topbar-run-picker-label">Run</span>
+            <select
+              className="topbar-run-picker-select"
+              value={selectedRunId ?? ''}
+              onChange={(event) => onRunChange(event.target.value)}
+              aria-label="Select run"
+            >
+              {!selectedRunId && <option value="">Select run…</option>}
+              {runIds.map((runId) => (
+                <option key={runId} value={runId}>
+                  {runId}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           type="button"
           className="theme-toggle"
@@ -46,17 +73,7 @@ export function AppTopbar({
           <span className="theme-toggle-label">Theme</span>
           <span className="theme-toggle-value">{mode === 'light' ? 'Light' : 'Dark'}</span>
         </button>
-        {statusSlot ?? (
-          <span className="topbar-status-chip">
-            {
-              currentView === 'chat'
-                ? 'Chat'
-                : currentView === 'review'
-                    ? 'Review'
-                    : 'Explorer'
-            }
-          </span>
-        )}
+        {statusSlot}
       </div>
     </header>
   );

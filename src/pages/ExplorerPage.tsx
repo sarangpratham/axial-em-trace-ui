@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AppTopbar } from '../components/AppTopbar';
 import { CandidateInspector } from '../components/CandidateInspector';
 import { DecisionPipeline } from '../components/DecisionPipeline';
@@ -5,6 +6,7 @@ import { JsonHighlight } from '../components/JsonHighlight';
 import { StatusBadge } from '../components/StatusBadge';
 import { TraceList } from '../components/TraceList';
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
+import type { AgentActivityRecord, ResolutionTimelineEvent } from '../types';
 import { humanizeToken, sourceResolutionLabel } from '../lib/sourceResolution';
 
 const MODULE_OPTIONS = ['news', 'linkedin', 'portfolio'];
@@ -13,6 +15,7 @@ const ANOMALY_PRESENCE_OPTIONS = [
   { value: 'with', label: 'With' },
   { value: 'clean', label: 'Clean' },
 ] as const;
+
 function formatAnomalyLabel(value: string) {
   return value.split('_').join(' ');
 }
@@ -21,10 +24,136 @@ function formatLabel(value?: string | null) {
   return humanizeToken(value);
 }
 
+function hasObjectContent(value: Record<string, unknown> | null | undefined) {
+  return Boolean(value && Object.keys(value).length > 0);
+}
+
+function formatTimestamp(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function changeFieldLabel(value: string) {
+  return value;
+}
+
+function renderAgentSubject(activity: AgentActivityRecord) {
+  if (activity.scope === 'family_consolidation') {
+    const url = typeof activity.subject.standardized_url === 'string'
+      ? activity.subject.standardized_url
+      : null;
+    return url || String(activity.subject.family_key || 'same-url family');
+  }
+  return String(
+    activity.subject.candidate_entity_name
+    || activity.subject.candidate_entity_id
+    || 'candidate',
+  );
+}
+
+function TimelineSection({ events }: { events: ResolutionTimelineEvent[] }) {
+  const [open, setOpen] = useState(false);
+  if (!events.length) return null;
+  return (
+    <div className="section">
+      <button type="button" className={`timeline-toggle${open ? ' timeline-toggle--open' : ''}`} onClick={() => setOpen((value) => !value)}>
+        <div className="timeline-toggle-copy">
+          <div className="section-title">
+            <span className="section-title-text">↻ Resolution Timeline</span>
+            <span className="section-hint">what changed across the run</span>
+          </div>
+          <span className="timeline-toggle-count">{events.length} events</span>
+        </div>
+        <span className={`timeline-toggle-chevron${open ? ' timeline-toggle-chevron--open' : ''}`}>▶</span>
+      </button>
+      {open && (
+        <div className="timeline-list">
+          {events.map((event, index) => (
+            <div className="timeline-card" key={`${event.event_type}:${index}`}>
+              <div className="timeline-meta">
+                <StatusBadge label={event.event_type} />
+                {event.occurred_at && <span className="timeline-time">{formatTimestamp(event.occurred_at)}</span>}
+              </div>
+              <div className="timeline-summary">{event.summary}</div>
+              {hasObjectContent(event.payload) && (
+                <details className="payload-disclosure">
+                  <summary>Raw payload</summary>
+                  <div className="json-body json-body--embedded">
+                    <JsonHighlight data={event.payload} />
+                  </div>
+                </details>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgentActivitySection({ activities }: { activities: AgentActivityRecord[] }) {
+  if (!activities.length) return null;
+  return (
+    <div className="section">
+      <div className="section-title">
+        <span className="section-title-text">⌘ Agent Activity</span>
+        <span className="section-hint">what the model actually saw and decided</span>
+      </div>
+      <div className="agent-list">
+        {activities.map((activity, index) => (
+          <div className="agent-card" key={`${activity.lane}:${activity.scope}:${index}`}>
+            <div className="agent-card-head">
+              <div>
+                <div className="agent-lane">{humanizeToken(activity.lane)}</div>
+                <div className="agent-subject">{renderAgentSubject(activity)}</div>
+              </div>
+              <div className="agent-meta-stack">
+                <StatusBadge label={activity.decision || activity.scope} />
+                {activity.confidence && <span className="agent-confidence">{activity.confidence}</span>}
+              </div>
+            </div>
+            {activity.reason && <div className="agent-reason">{activity.reason}</div>}
+            <div className="agent-foot">
+              <span className="agent-scope">{humanizeToken(activity.scope)}</span>
+              {activity.used_web_search && <span className="agent-web-pill">web evidence</span>}
+              {activity.occurred_at && <span className="agent-time">{formatTimestamp(activity.occurred_at)}</span>}
+            </div>
+            {(hasObjectContent(activity.raw_prompt_payload) || hasObjectContent(activity.raw_response_payload)) && (
+              <details className="payload-disclosure">
+                <summary>Raw prompt + response</summary>
+                <div className="payload-grid">
+                  <div>
+                    <div className="payload-title">Prompt payload</div>
+                    <div className="json-body json-body--embedded">
+                      <JsonHighlight data={activity.raw_prompt_payload} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="payload-title">Response payload</div>
+                    <div className="json-body json-body--embedded">
+                      <JsonHighlight data={activity.raw_response_payload} />
+                    </div>
+                  </div>
+                </div>
+              </details>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
   const {
-    runsQuery,
-    selectedRunId,
     updateParam,
     searchInput,
     setSearchInput,
@@ -48,15 +177,6 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
         </div>
 
         <div className="explorer-toolbar-controls">
-          <span className="topbar-filter-label">Run</span>
-          <select className="topbar-select" value={selectedRunId} onChange={(event) => updateParam('run_id', event.target.value)}>
-            {(runsQuery.data ?? []).map((runId) => (
-              <option key={runId} value={runId}>
-                {runId}
-              </option>
-            ))}
-          </select>
-
           <span className="topbar-filter-label">Search</span>
           <input
             className="topbar-input"
@@ -184,7 +304,7 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
               <div className="stat-divider" />
               <div className="stat-pill stat-pill--anomaly">
                 <span className="stat-dot" style={{ background: 'var(--red)' }} />
-                <span className="num">{summary.anomaly_total}</span> anomalies
+                <span className="num">{summary.anomaly_total}</span> anomaly signals
               </div>
               {summary.anomaly_by_severity &&
                 Object.entries(summary.anomaly_by_severity).map(([severity, count]) => (
@@ -216,11 +336,34 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
     tracesQuery,
   } = explorer;
 
+  const retrievalDebug = detail?.retrieval_debug ?? detail?.retrieval_summary ?? {};
+  const evaluationContext = detail?.evaluation_context;
+  const resolution = (detail?.resolution ?? {}) as Record<string, unknown>;
+  const sameUrlMerge = (resolution.same_url_family_merge ?? {}) as Record<string, unknown>;
+  const assignedEntityRemap = (sameUrlMerge.assigned_entity_id ?? {}) as Record<string, unknown>;
+  const remapPrevious = typeof assignedEntityRemap.previous === 'string' ? assignedEntityRemap.previous : null;
+  const remapCurrent = typeof assignedEntityRemap.current === 'string' ? assignedEntityRemap.current : null;
+  const changedFields = evaluationContext?.changed_fields ?? [];
+  const changeSources = evaluationContext?.change_sources ?? {};
+  const rawSource = detail?.raw_source ?? detail?.source ?? {};
+  const currentSource = detail?.current_source ?? {};
+  const hasSourceDiff = changedFields.length > 0;
+  const retrievalCount = (() => {
+    const explicitCount = typeof retrievalDebug.candidate_count === 'number'
+      ? retrievalDebug.candidate_count
+      : typeof retrievalDebug.final_candidate_count === 'number'
+        ? retrievalDebug.final_candidate_count
+        : null;
+    return explicitCount ?? detail?.candidate_count ?? 0;
+  })();
+
   return (
     <div className="shell shell--explorer">
       <AppTopbar
         currentView="explorer"
-        statusSlot={<span className="topbar-status-chip" title={explorer.selectedRunId}>Run {explorer.selectedRunId || 'not selected'}</span>}
+        runIds={explorer.runsQuery.data ?? []}
+        selectedRunId={explorer.selectedRunId}
+        onRunChange={(runId) => explorer.updateParam('run_id', runId)}
       />
 
       <div className="explorer-shell">
@@ -300,7 +443,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
                 </div>
                 <div className="metric-block">
                   <div className="metric-label">Retrieval</div>
-                  <div className="metric-value">{String(detail.retrieval_summary?.candidate_count ?? detail.candidate_count ?? 0)}</div>
+                  <div className="metric-value">{String(retrievalCount)}</div>
                   <div className="metric-sub">retrieval pool surfaced</div>
                   <div className="metric-bar" style={{ background: 'var(--blue-dim)' }} />
                 </div>
@@ -345,6 +488,11 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
                         <div className="winner-id">
                           {detail.assigned_entity_id} · {humanizeToken(detail.decision_source, 'deterministic')}
                         </div>
+                        {remapPrevious && remapCurrent && remapPrevious !== remapCurrent && (
+                          <div className="winner-remap-note">
+                            Originally created {remapPrevious}, later consolidated into {remapCurrent}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : isNew ? (
@@ -371,18 +519,34 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
                     </div>
                   )}
 
-                  <div className="enrichment-card">
-                    <span className="enrichment-icon">{enrichment?.eligible ? '🔗' : '⊘'}</span>
+                  <div className="enrichment-card evaluation-card">
                     <div>
-                      <div className="enrichment-title">Derived Enrichment</div>
-                      <div className="enrichment-sub">{String(enrichment?.reason ?? 'No enrichment captured')}</div>
+                      <div className="enrichment-title">Evaluation Snapshot</div>
+                      <div className="context-list">
+                        <div className="context-row">
+                          <span>Source URL at evaluation</span>
+                          <strong>{evaluationContext?.source_url_at_evaluation || 'missing'}</strong>
+                        </div>
+                        <div className="context-row">
+                          <span>Current source URL</span>
+                          <strong>{evaluationContext?.current_source_url || 'missing'}</strong>
+                        </div>
+                        {evaluationContext?.url_matching_skipped_reason && (
+                          <div className="context-row">
+                            <span>URL context</span>
+                            <strong>{humanizeToken(evaluationContext.url_matching_skipped_reason)}</strong>
+                          </div>
+                        )}
+                      </div>
                       <span className={`enrichment-url${!enrichment?.eligible ? ' enrichment-url--none' : ''}`}>
-                        {String(enrichment?.final_matching_url ?? 'no URL derived')}
+                        {String(enrichment?.final_matching_url ?? 'no enrichment URL')}
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
+
+              <TimelineSection events={detail.resolution_timeline} />
 
               <div className="section">
                 <div className="section-title">
@@ -391,30 +555,74 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
                     {detail.candidate_evaluations.length} candidates · click a row for evidence
                   </span>
                 </div>
-                <CandidateInspector candidates={detail.candidate_evaluations} />
+                <CandidateInspector
+                  candidates={detail.candidate_evaluations}
+                  evaluationContext={detail.evaluation_context}
+                />
               </div>
 
-              {Object.keys(detail.retrieval_summary ?? {}).length > 0 && (
+              <AgentActivitySection activities={detail.agent_activity} />
+
+              {hasObjectContent(retrievalDebug) && (
                 <div className="section">
                   <div className="section-title">
                     <span className="section-title-text">⊛ Candidate Retrieval</span>
+                    <span className="section-hint">actual retrieval debug payload</span>
                   </div>
-                  <div className="json-body">
-                    <JsonHighlight data={detail.retrieval_summary} />
+                  <div className="json-body json-body--embedded">
+                    <JsonHighlight data={retrievalDebug} />
                   </div>
                 </div>
               )}
 
-              <button className={`json-toggle${jsonOpen ? ' json-toggle--open' : ''}`} onClick={() => setJsonOpen((value) => !value)}>
-                <span className={`json-chevron${jsonOpen ? ' json-chevron--open' : ''}`}>▶</span>
-                Raw Source JSON
-                <span className="json-hint">original module row</span>
-              </button>
-              {jsonOpen && (
-                <div className="json-body">
-                  <JsonHighlight data={detail.source} />
+              <div className="section section--source-data">
+                <div className="section-title">
+                  <span className="section-title-text">⌗ Source Data</span>
+                  <span className="section-hint">original raw row vs final written-back row</span>
                 </div>
-              )}
+                {hasSourceDiff && (
+                  <div className="change-summary">
+                    <div className="change-summary-title">Changed after processing</div>
+                    <div className="change-pill-row">
+                      {changedFields.map((field) => (
+                        <span key={field} className="change-pill">{changeFieldLabel(field)}</span>
+                      ))}
+                    </div>
+                    {Object.entries(changeSources).length > 0 && (
+                      <div className="change-source-list">
+                        {Object.entries(changeSources).map(([field, sources]) => (
+                          <div className="change-source-row" key={field}>
+                            <span>{field}</span>
+                            <strong>{sources.join(', ')}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button className={`json-toggle${jsonOpen ? ' json-toggle--open' : ''}`} onClick={() => setJsonOpen((value) => !value)}>
+                  <span className={`json-chevron${jsonOpen ? ' json-chevron--open' : ''}`}>▶</span>
+                  Source data JSON
+                  <span className="json-hint">raw vs current</span>
+                </button>
+                {jsonOpen && (
+                  <div className="source-json-grid">
+                    <div className="source-json-card">
+                      <div className="source-json-title">Original Raw Source JSON</div>
+                      <div className="json-body json-body--embedded">
+                        <JsonHighlight data={rawSource} />
+                      </div>
+                    </div>
+                    <div className="source-json-card">
+                      <div className="source-json-title">Current Written-Back Source JSON</div>
+                      <div className="json-body json-body--embedded">
+                        <JsonHighlight data={currentSource} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           ) : null}
         </main>

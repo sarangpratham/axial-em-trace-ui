@@ -60,8 +60,11 @@ export async function getRunSummary(runId: string): Promise<RunSummary> {
     parent_processing_deferred: Boolean(summary.parent_processing_deferred),
     deferred_parent_observation_count: readNumber(summary.deferred_parent_observation_count),
     anomaly_total: readNumber(summary.anomaly_total),
+    source_linked_anomaly_total: readNumber(summary.source_linked_anomaly_total),
+    run_master_level_anomaly_total: readNumber(summary.run_master_level_anomaly_total),
     anomaly_by_type: readObject(summary.anomaly_by_type) as Record<string, number>,
     anomaly_by_severity: readObject(summary.anomaly_by_severity) as Record<string, number>,
+    anomaly_by_scope: readObject(summary.anomaly_by_scope) as Record<string, number>,
   };
 }
 
@@ -131,7 +134,7 @@ export function getAnomalies(params: {
   return request<AnomalyRecord[]>(
     `/runs/${encodeURIComponent(params.runId)}/anomalies${search.size ? `?${search.toString()}` : ''}`,
   ).then((anomalies) =>
-    anomalies.filter((item) => {
+    anomalies.map(mapAnomalyRecord).filter((item) => {
       if (params.anomalyType && item.anomaly_type !== params.anomalyType) return false;
       if (params.severity && item.anomaly_severity !== params.severity) return false;
       return true;
@@ -179,11 +182,64 @@ function mapSourceRecordListItem(
 }
 
 function mapSourceRecordDetail(detail: SourceRecordDetail): TraceDetail {
-  const summary = mapSourceRecordListItem(detail as unknown as Record<string, unknown>, detail.anomalies);
-  return {
+  const normalizedDetail: SourceRecordDetail = {
     ...detail,
-    ...summary,
+    source: readObject(detail.source),
+    raw_source: readObject(detail.raw_source),
+    current_source: readObject(detail.current_source),
+    retrieval_summary: readObject(detail.retrieval_summary),
+    retrieval_debug: readObject(detail.retrieval_debug || detail.retrieval_summary),
+    evaluation_context: {
+      source_url_at_evaluation: asNullableText(detail.evaluation_context?.source_url_at_evaluation),
+      current_source_url: asNullableText(detail.evaluation_context?.current_source_url),
+      raw_source_url: asNullableText(detail.evaluation_context?.raw_source_url),
+      source_url_missing_at_evaluation: Boolean(detail.evaluation_context?.source_url_missing_at_evaluation),
+      url_matching_skipped_reason: asNullableText(detail.evaluation_context?.url_matching_skipped_reason),
+      created_entity_id_initial: asNullableText(detail.evaluation_context?.created_entity_id_initial),
+      assigned_entity_id_final: asNullableText(detail.evaluation_context?.assigned_entity_id_final),
+      changed_fields: readArray(detail.evaluation_context?.changed_fields).map((value) => String(value)),
+      change_sources: Object.fromEntries(
+        Object.entries(readObject(detail.evaluation_context?.change_sources)).map(([key, value]) => [
+          key,
+          readArray(value).map((item) => String(item)),
+        ]),
+      ),
+    },
+    resolution_timeline: readArray(detail.resolution_timeline).map((item) => {
+      const row = readObject(item);
+      return {
+        event_type: asText(row.event_type, 'event'),
+        summary: asText(row.summary, ''),
+        occurred_at: asNullableText(row.occurred_at),
+        payload: readObject(row.payload),
+      };
+    }),
+    agent_activity: readArray(detail.agent_activity).map((item) => {
+      const row = readObject(item);
+      return {
+        lane: asText(row.lane, 'agent'),
+        scope: asText(row.scope, 'candidate_evaluation'),
+        subject: readObject(row.subject),
+        decision: asNullableText(row.decision),
+        confidence: asNullableText(row.confidence),
+        reason: asNullableText(row.reason),
+        used_web_search: Boolean(row.used_web_search),
+        raw_prompt_payload: readObject(row.raw_prompt_payload),
+        raw_response_payload: readObject(row.raw_response_payload),
+        occurred_at: asNullableText(row.occurred_at),
+      };
+    }),
     candidate_evaluations: buildCandidateEvaluations(detail.candidate_evaluations),
+    anomalies: readArray(detail.anomalies).map((item) => mapAnomalyRecord(item as AnomalyRecord)),
+  };
+
+  const summary = mapSourceRecordListItem(
+    normalizedDetail as unknown as Record<string, unknown>,
+    normalizedDetail.anomalies,
+  );
+  return {
+    ...normalizedDetail,
+    ...summary,
   };
 }
 
@@ -209,6 +265,7 @@ function buildCandidateEvaluations(
     agent_reason: asNullableText(item.agent_reason),
     suppression_reason: asNullableText(item.suppression_reason),
     evaluation_payload: readObject(item.evaluation_payload),
+    updated_at: asNullableText(item.updated_at),
   }));
 }
 
@@ -216,11 +273,40 @@ function buildAnomalyIndex(anomalies: AnomalyRecord[]) {
   const index = new Map<string, AnomalyRecord[]>();
   for (const anomaly of anomalies) {
     const key = anomaly.source_trace_id;
+    if (!key) continue;
     const bucket = index.get(key);
     if (bucket) bucket.push(anomaly);
     else index.set(key, [anomaly]);
   }
   return index;
+}
+
+function mapAnomalyRecord(item: AnomalyRecord): AnomalyRecord {
+  return {
+    ...item,
+    source_trace_id: asNullableText(item.source_trace_id),
+    source_module: asNullableText(item.source_module),
+    source_unique_id: asNullableText(item.source_unique_id),
+    anomaly_type: asText(item.anomaly_type, 'unknown'),
+    anomaly_severity: asText(item.anomaly_severity, 'medium') as AnomalyRecord['anomaly_severity'],
+    anomaly_reason: asText(item.anomaly_reason, 'No anomaly reason provided.'),
+    anomaly_scope: asNullableText(item.anomaly_scope) ?? undefined,
+    display_name: asNullableText(item.display_name) ?? undefined,
+    plain_meaning: asNullableText(item.plain_meaning) ?? undefined,
+    operator_signal: asNullableText(item.operator_signal) ?? undefined,
+    source_entity_name: asNullableText(item.source_entity_name),
+    group_key: asNullableText(item.group_key),
+    winner_entity_id: asNullableText(item.winner_entity_id) ?? undefined,
+    winner_entity_name: asNullableText(item.winner_entity_name) ?? undefined,
+    winner_match_phase: asNullableText(item.winner_match_phase) ?? undefined,
+    winner_match_type: asNullableText(item.winner_match_type) ?? undefined,
+    winner_url_status: asNullableText(item.winner_url_status) ?? undefined,
+    anomaly_details: readObject(item.anomaly_details),
+    created_at: asText(item.created_at, ''),
+    total_candidates: readNumber(item.total_candidates),
+    matched_candidates: readNumber(item.matched_candidates),
+    best_rank_key: Array.isArray(item.best_rank_key) ? item.best_rank_key : null,
+  };
 }
 
 function buildDecisionStory(item: Record<string, unknown>) {
@@ -261,6 +347,10 @@ function readObject(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function readArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
 }
 
 function asText(value: unknown, fallback = '—') {

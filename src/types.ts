@@ -24,23 +24,31 @@ export type RunSummary = {
   parent_processing_deferred?: boolean;
   deferred_parent_observation_count?: number;
   anomaly_total?: number;
+  source_linked_anomaly_total?: number;
+  run_master_level_anomaly_total?: number;
   anomaly_by_type?: Record<string, number>;
   anomaly_by_severity?: Record<string, number>;
+  anomaly_by_scope?: Record<string, number>;
 };
 
 export type AnomalyRecord = {
   id: number;
   run_id: string;
-  source_trace_id: string;
-  source_module: string;
-  source_unique_id: string;
+  source_trace_id?: string | null;
+  source_module?: string | null;
+  source_unique_id?: string | null;
   anomaly_type: string;
   anomaly_severity: 'low' | 'medium' | 'high' | 'critical';
   anomaly_reason: string;
-  source_entity_name?: string;
+  anomaly_scope?: 'source_linked' | 'run_master_level' | string;
+  display_name?: string;
+  plain_meaning?: string;
+  operator_signal?: 'informational' | 'investigate' | 'requires_human_resolution' | string;
+  source_entity_name?: string | null;
   source_entity_url?: string;
   winner_entity_id?: string;
   winner_entity_name?: string;
+  group_key?: string | null;
   winner_match_phase?: string;
   winner_match_type?: string;
   winner_url_status?: string;
@@ -101,6 +109,39 @@ export type CandidateEvaluation = {
   agent_reason?: string | null;
   suppression_reason?: string | null;
   evaluation_payload: Record<string, unknown>;
+  updated_at?: string | null;
+};
+
+export type SourceEvaluationContext = {
+  source_url_at_evaluation?: string | null;
+  current_source_url?: string | null;
+  raw_source_url?: string | null;
+  source_url_missing_at_evaluation: boolean;
+  url_matching_skipped_reason?: string | null;
+  created_entity_id_initial?: string | null;
+  assigned_entity_id_final?: string | null;
+  changed_fields: string[];
+  change_sources: Record<string, string[]>;
+};
+
+export type ResolutionTimelineEvent = {
+  event_type: string;
+  summary: string;
+  occurred_at?: string | null;
+  payload: Record<string, unknown>;
+};
+
+export type AgentActivityRecord = {
+  lane: string;
+  scope: string;
+  subject: Record<string, unknown>;
+  decision?: string | null;
+  confidence?: string | null;
+  reason?: string | null;
+  used_web_search: boolean;
+  raw_prompt_payload: Record<string, unknown>;
+  raw_response_payload: Record<string, unknown>;
+  occurred_at?: string | null;
 };
 
 export type MasterArtifactDetail = {
@@ -124,8 +165,14 @@ export type MasterSearchResult = Omit<MasterArtifactDetail, 'support_source_reco
 
 export type SourceRecordDetail = SourceRecordListItem & {
   source: Record<string, unknown>;
+  raw_source: Record<string, unknown>;
+  current_source: Record<string, unknown>;
   derived_enrichment: Record<string, unknown>;
   retrieval_summary: Record<string, unknown>;
+  retrieval_debug: Record<string, unknown>;
+  evaluation_context: SourceEvaluationContext;
+  resolution_timeline: ResolutionTimelineEvent[];
+  agent_activity: AgentActivityRecord[];
   resolution: Record<string, unknown>;
   candidate_evaluations: CandidateEvaluation[];
   anomalies: AnomalyRecord[];
