@@ -18,9 +18,9 @@ Arguments marked with ? are optional. Sub-components can be inline or referenced
 The `action` prop type accepts: ContinueConversation (sends message to LLM), OpenUrl (navigates to URL), or Custom (app-defined).
 
 RunSummaryCard(runId: string, notes?: string, metrics?: {label: string, value: string, tone?: "default" | "cyan" | "green" | "amber" | "red" | "purple"}[]) — Summarize one entity-matching run with a compact metric grid.
-TraceSearchResults(title?: string, results?: {sourceModule: string, sourceUniqueId: string, sourceEntityName: string, finalStatus?: string, winnerEntityName?: string, anomalyCount?: number, decisionStory?: string}[]) — Render a compact table of decision trace results.
-TraceEvidencePanel(title?: string, narrative: string, traceRef: {sourceEntityName: string, sourceModule: string, sourceUniqueId: string}, winningDecision?: {winnerEntityName?: string, winnerEntityId?: string, matchPhase?: string, matchType?: string}, citations?: {label: string, value: string, kind?: string}[], anomalies?: {anomalyType: string, severity?: string, reason?: string, count?: number}[]) — Show narrative evidence for one decision trace including citations and anomalies.
-AnomalySummaryPanel(title?: string, items?: ({anomalyType: string, severity?: string, reason?: string, count?: number} | {label: string, value: string | number, tone?: "default" | "cyan" | "green" | "amber" | "red" | "purple"})[]) — Summarize anomaly clusters, counts, severities, and reasons.
+TraceSearchResults(title?: string, results?: {sourceModule: string, sourceUniqueId: string, sourceEntityName: string, resolutionStatus?: string, assignedEntityName?: string, anomalyCount?: number, decisionStory?: string}[]) — Render a compact table of source-record resolution results.
+TraceEvidencePanel(title?: string, narrative: string, traceRef: {sourceEntityName: string, sourceModule: string, sourceUniqueId: string}, winningDecision?: {assignedEntityName?: string, assignedEntityId?: string, matchPhase?: string, matchType?: string}, citations?: {label: string, value: string, kind?: string}[], anomalies?: {anomalyType: string, severity?: string, reason?: string, count?: number}[]) — Show narrative evidence for one source-record resolution including citations and anomalies.
+AnomalySummaryPanel(title?: string, items?: ({anomalyType: string, severity?: string, reason?: string, count?: number} | {label: string, value: string | number, tone?: "default" | "cyan" | "green" | "amber" | "red" | "purple"})[]) — Summarize anomaly signals, counts, severities, and reasons.
 MasterEntityPanel(entityId: string, entityName: string, entityUrl?: string, industry?: string, activity?: string, aliases?: string[], relatedEntities?: {entityId: string, name: string, relationship?: string}[]) — Render a master entity snapshot with aliases and related entities.
 UtilityResultCard(title: string, summary?: string, rows?: {label: string, value: string}[]) — Display pure utility output like normalized URLs or standardized names.
 
@@ -41,7 +41,7 @@ Always write the root = Root(...) statement first so the UI shell appears immedi
 
 root = RunSummaryCard("RUN_123", "Anomaly-heavy batch", [{label:"Total traces", value:"248", tone:"cyan"}, {label:"Anomalies", value:"19", tone:"amber"}])
 
-root = TraceEvidencePanel("Why Axial chose Acme", "The winner matched on name and standardized domain evidence.", {sourceEntityName:"Acme Holdings", sourceModule:"news", sourceUniqueId:"n_42"}, {winnerEntityName:"Acme Inc.", winnerEntityId:"EM_9", matchPhase:"url_resolution", matchType:"domain"}, [{label:"trace", value:"RUN_123:news:n_42", kind:"trace"}], [{anomalyType:"url_conflict", severity:"medium", reason:"Two candidate domains looked similar", count:1}])
+root = TraceEvidencePanel("Why Axial resolved Acme", "The assigned entity matched on name and standardized domain evidence.", {sourceEntityName:"Acme Holdings", sourceModule:"news", sourceUniqueId:"n_42"}, {assignedEntityName:"Acme Inc.", assignedEntityId:"EM_9", matchPhase:"url_resolution", matchType:"domain"}, [{label:"source", value:"RUN_123:news:n_42", kind:"source"}], [{anomalyType:"url_conflict", severity:"medium", reason:"Two candidate domains looked similar", count:1}])
 
 ## Important Rules
 - ALWAYS start with root = Root(...)

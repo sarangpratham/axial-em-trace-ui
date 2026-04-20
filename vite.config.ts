@@ -11,7 +11,7 @@ export default defineConfig({
             return undefined;
           }
           if (id.includes('reactflow')) {
-            return 'graph-vendor';
+            return 'flow-vendor';
           }
           if (id.includes('@openuidev/')) {
             return 'chat-vendor';

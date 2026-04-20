@@ -3,6 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        var key = 'decision-tracer:theme-mode';
+        var fallback = 'dark';
+        try {
+          var stored = window.localStorage.getItem(key);
+          var mode = stored === 'light' || stored === 'dark' ? stored : fallback;
+          document.documentElement.dataset.theme = mode;
+          document.documentElement.style.colorScheme = mode;
+        } catch (error) {
+          document.documentElement.dataset.theme = fallback;
+          document.documentElement.style.colorScheme = fallback;
+        }
+      }());
+    </script>
     <title>Decision Tracer — Entity Matching</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

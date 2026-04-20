@@ -3,9 +3,10 @@ import type { Message, Thread, UserMessage } from '@openuidev/react-headless';
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
 
 const STORAGE_KEY = 'axial-analysis-ui:analysis-user-key';
+const runtimeEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 
 const INSIGHTS_API_BASE_URL =
-  import.meta.env.VITE_INSIGHTS_API_BASE_URL || 'http://localhost:5003/api/v1';
+  runtimeEnv.VITE_INSIGHTS_API_BASE_URL || 'http://localhost:5003/api/v1';
 
 export const ANALYSIS_CHAT_API_URL = `${INSIGHTS_API_BASE_URL}/chat/stream`;
 export const ANALYSIS_THREADS_API_URL = `${INSIGHTS_API_BASE_URL}/chat/threads`;
@@ -32,13 +33,6 @@ export function useAnalysisUserKey() {
 }
 
 export function createAnalysisContextSnapshot(explorer: TraceExplorerState) {
-  const graphFocusKind = explorer.params.get('graph_focus_kind');
-  const graphFocusId = explorer.params.get('graph_focus_id');
-  const selectedAssignedEntityId =
-    explorer.selectedTrace?.winner_entity_id || explorer.detail?.winner_entity_id || null;
-  const selectedAssignedEntityName =
-    explorer.selectedTrace?.winner_entity_name || explorer.detail?.winner_entity_name || null;
-
   return {
     currentRun: explorer.selectedRunId
       ? {
@@ -46,41 +40,12 @@ export function createAnalysisContextSnapshot(explorer: TraceExplorerState) {
           route: 'chat',
         }
       : null,
-    selectedTrace: explorer.selectedTrace
-      ? {
-          runId: explorer.selectedTrace.run_id,
-          sourceModule: explorer.selectedTrace.source_module,
-          sourceUniqueId: explorer.selectedTrace.source_unique_id,
-          sourceEntityName: explorer.selectedTrace.source_entity_name,
-          finalStatus: explorer.selectedTrace.final_status,
-          assignedEntityId: selectedAssignedEntityId,
-          assignedEntityName: selectedAssignedEntityName,
-        }
-      : null,
-    selectedCluster:
-      graphFocusKind === 'cluster' && graphFocusId
-        ? {
-            runId: explorer.selectedRunId,
-            clusterId: graphFocusId.replace(/^cluster:/, ''),
-          }
-        : null,
-    selectedEdge:
-      graphFocusKind === 'edge' && graphFocusId
-        ? {
-            runId: explorer.selectedRunId,
-            edgeKey: graphFocusId,
-          }
-        : null,
-    selectedMaster:
-      graphFocusKind === 'master' && graphFocusId
-        ? {
-            runId: explorer.selectedRunId,
-            entityId: graphFocusId.replace(/^master:/, ''),
-          }
-        : null,
+    selectedSourceRecord: null,
+    selectedMaster: null,
     visibleFilters: {
       module: explorer.moduleFilter || null,
-      finalStatus: explorer.statusFilter || null,
+      resolutionStatus: explorer.statusFilter || null,
+      decisionSource: explorer.decisionSourceFilter || null,
       query: explorer.searchInput || null,
     },
   };

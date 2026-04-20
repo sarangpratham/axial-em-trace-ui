@@ -3,6 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { getRunSummary, getRuns, getTraceDetail, getTraces } from '../lib/api';
 import {
+  isAssignedExistingMaster,
+  isCreatedNewMaster,
+  normalizeSourceResolutionStatus,
+} from '../lib/sourceResolution';
+import {
   getReviewCase,
   getReviewCases,
   getRunPublishSummary,
@@ -11,26 +16,12 @@ import type { TraceSummary } from '../types';
 
 export type TraceExplorerState = ReturnType<typeof useTraceExplorerState>;
 
-const URL_STATE_KEYS = [
-  'run_id',
-  'q',
-  'module',
-  'final_status',
-  'winner_origin',
-  'has_anomalies',
-  'anomaly_type',
-  'selected_module',
-  'selected_unique_id',
-  'review_tab',
-  'review_case_id',
-] as const;
-
 const SESSION_KEYS = {
   runId: 'decision-tracer:selected-run-id',
   searchInput: 'decision-tracer:search-input',
   moduleFilter: 'decision-tracer:module-filter',
-  statusFilter: 'decision-tracer:status-filter',
-  originFilter: 'decision-tracer:origin-filter',
+  statusFilter: 'decision-tracer:resolution-status-filter',
+  decisionSourceFilter: 'decision-tracer:decision-source-filter',
   anomalyPresence: 'decision-tracer:anomaly-presence',
   anomalyType: 'decision-tracer:anomaly-type',
   selectedModule: 'decision-tracer:selected-module',
@@ -69,7 +60,7 @@ function useSessionStringState(key: string, initialValue = '') {
 }
 
 export function useTraceExplorerState() {
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const [jsonOpen, setJsonOpen] = useState(false);
   const [searchInput, setSearchInputState] = useSessionStringState(
     SESSION_KEYS.searchInput,
@@ -86,11 +77,13 @@ export function useTraceExplorerState() {
   );
   const [statusFilter, setStatusFilter] = useSessionStringState(
     SESSION_KEYS.statusFilter,
-    params.get('final_status') ?? '',
+    normalizeSourceResolutionStatus(params.get('resolution_status') ?? '')
+      ?? params.get('resolution_status')
+      ?? '',
   );
-  const [originFilter, setOriginFilter] = useSessionStringState(
-    SESSION_KEYS.originFilter,
-    params.get('winner_origin') ?? '',
+  const [decisionSourceFilter, setDecisionSourceFilter] = useSessionStringState(
+    SESSION_KEYS.decisionSourceFilter,
+    params.get('decision_source') ?? '',
   );
   const [anomalyPresenceFilter, setAnomalyPresenceFilterState] = useSessionStringState(
     SESSION_KEYS.anomalyPresence,
@@ -131,19 +124,6 @@ export function useTraceExplorerState() {
   });
 
   useEffect(() => {
-    const next = new URLSearchParams(params);
-    let changed = false;
-    for (const key of URL_STATE_KEYS) {
-      if (!next.has(key)) continue;
-      next.delete(key);
-      changed = true;
-    }
-    if (changed) {
-      setParams(next, { replace: true });
-    }
-  }, [params, setParams]);
-
-  useEffect(() => {
     if (!selectedRunId && runsQuery.data?.[0]) {
       setSelectedRunId(runsQuery.data[0]);
       return;
@@ -177,7 +157,7 @@ export function useTraceExplorerState() {
       selectedRunId,
       moduleFilter,
       statusFilter,
-      originFilter,
+      decisionSourceFilter,
       deferredSearch,
       anomalyPresenceFilter,
       anomalyTypeFilter,
@@ -186,8 +166,8 @@ export function useTraceExplorerState() {
       getTraces({
         runId: selectedRunId,
         module: moduleFilter || undefined,
-        finalStatus: statusFilter || undefined,
-        winnerOrigin: originFilter || undefined,
+        resolutionStatus: statusFilter || undefined,
+        decisionSource: decisionSourceFilter || undefined,
         query: deferredSearch || undefined,
         hasAnomalies:
           anomalyPresenceFilter === 'with'
@@ -218,6 +198,12 @@ export function useTraceExplorerState() {
     setAnomalyPresenceFilterState,
     setAnomalyTypeFilterState,
   ]);
+
+  useEffect(() => {
+    const normalized = normalizeSourceResolutionStatus(statusFilter);
+    if (!normalized || normalized === statusFilter) return;
+    setStatusFilter(normalized);
+  }, [setStatusFilter, statusFilter]);
 
   const selectedTrace = useMemo(() => {
     return (
@@ -332,12 +318,10 @@ export function useTraceExplorerState() {
   const reviewCases = reviewCasesQuery.data ?? [];
   const publishSummary = publishSummaryQuery.data;
   const reviewCaseDetail = reviewCaseDetailQuery.data;
-  const outcome = detail?.trace_payload.final_outcome as Record<string, unknown> | null | undefined;
-  const enrichment = detail?.pre_match_enrichment as Record<string, unknown> | null | undefined;
-  const isMatch =
-    detail?.final_status === 'master_match' ||
-    detail?.final_status === 'incoming_second_pass_match';
-  const isNew = detail?.final_status === 'new_entity_created';
+  const resolution = detail?.resolution as Record<string, unknown> | null | undefined;
+  const enrichment = detail?.derived_enrichment as Record<string, unknown> | null | undefined;
+  const isMatch = isAssignedExistingMaster(detail?.resolution_status);
+  const isNew = isCreatedNewMaster(detail?.resolution_status);
 
   const selectedTraceKey = selectedTrace
     ? `${selectedTrace.source_module}::${selectedTrace.source_unique_id}`
@@ -355,11 +339,11 @@ export function useTraceExplorerState() {
       case 'module':
         setModuleFilter(value);
         return;
-      case 'final_status':
+      case 'resolution_status':
         setStatusFilter(value);
         return;
-      case 'winner_origin':
-        setOriginFilter(value);
+      case 'decision_source':
+        setDecisionSourceFilter(value);
         return;
       default:
         return;
@@ -398,7 +382,6 @@ export function useTraceExplorerState() {
   };
 
   return {
-    params,
     searchInput,
     setSearchInput,
     deferredSearch,
@@ -408,7 +391,7 @@ export function useTraceExplorerState() {
     selectedRunId,
     moduleFilter,
     statusFilter,
-    originFilter,
+    decisionSourceFilter,
     anomalyPresenceFilter,
     anomalyTypeFilter,
     availableAnomalyTypes,
@@ -430,7 +413,7 @@ export function useTraceExplorerState() {
     selectedReviewCase,
     reviewCaseDetail,
     publishSummary,
-    outcome,
+    resolution,
     enrichment,
     isMatch,
     isNew,

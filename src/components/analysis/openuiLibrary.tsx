@@ -30,8 +30,8 @@ const traceRowSchema = z.object({
   sourceModule: z.string(),
   sourceUniqueId: z.string(),
   sourceEntityName: z.string(),
-  finalStatus: z.string().optional(),
-  winnerEntityName: z.string().optional(),
+  resolutionStatus: z.string().optional(),
+  assignedEntityName: z.string().optional(),
   anomalyCount: z.number().optional(),
   decisionStory: z.string().optional(),
 });
@@ -108,7 +108,7 @@ const TraceSearchResultsSchema = z.object({
 
 const TraceSearchResults = defineComponent({
   name: 'TraceSearchResults',
-  description: 'Render a compact table of decision trace results.',
+  description: 'Render a compact table of source-record resolution results.',
   props: TraceSearchResultsSchema,
   component: ({ props }) => {
     const results = asArray(props.results);
@@ -141,8 +141,8 @@ const TraceSearchResults = defineComponent({
                       {row.decisionStory && <div className="analysis-table-sub">{row.decisionStory}</div>}
                     </td>
                     <td>{asText(row.sourceModule)} · {asText(row.sourceUniqueId)}</td>
-                    <td>{asText(row.finalStatus)}</td>
-                    <td>{asText(row.winnerEntityName)}</td>
+                    <td>{asText(row.resolutionStatus)}</td>
+                    <td>{asText(row.assignedEntityName)}</td>
                     <td>{row.anomalyCount ?? 0}</td>
                   </tr>
                 ))}
@@ -166,8 +166,8 @@ const TraceEvidencePanelSchema = z.object({
     sourceUniqueId: z.string(),
   }),
   winningDecision: z.object({
-    winnerEntityName: z.string().optional(),
-    winnerEntityId: z.string().optional(),
+    assignedEntityName: z.string().optional(),
+    assignedEntityId: z.string().optional(),
     matchPhase: z.string().optional(),
     matchType: z.string().optional(),
   }).optional(),
@@ -177,7 +177,7 @@ const TraceEvidencePanelSchema = z.object({
 
 const TraceEvidencePanel = defineComponent({
   name: 'TraceEvidencePanel',
-  description: 'Show narrative evidence for one decision trace including citations and anomalies.',
+  description: 'Show narrative evidence for one source-record resolution including citations and anomalies.',
   props: TraceEvidencePanelSchema,
   component: ({ props }) => {
     const citations = asArray(props.citations);
@@ -195,12 +195,12 @@ const TraceEvidencePanel = defineComponent({
         {props.winningDecision && (
           <div className="analysis-inline-grid">
             <div className="analysis-inline-panel">
-              <span className="analysis-inline-label">Winner</span>
-              <strong>{asText(props.winningDecision.winnerEntityName, 'No winner')}</strong>
-              <span>{asText(props.winningDecision.winnerEntityId, 'No winner ID')}</span>
+              <span className="analysis-inline-label">Assigned entity</span>
+              <strong>{asText(props.winningDecision.assignedEntityName, 'No assigned entity')}</strong>
+              <span>{asText(props.winningDecision.assignedEntityId, 'No assigned entity ID')}</span>
             </div>
             <div className="analysis-inline-panel">
-              <span className="analysis-inline-label">Match path</span>
+              <span className="analysis-inline-label">Resolution path</span>
               <strong>{asText(props.winningDecision.matchPhase, 'Unknown phase')}</strong>
               <span>{asText(props.winningDecision.matchType, 'Unknown type')}</span>
             </div>
@@ -240,7 +240,7 @@ const AnomalySummaryPanelSchema = z.object({
 
 const AnomalySummaryPanel = defineComponent({
   name: 'AnomalySummaryPanel',
-  description: 'Summarize anomaly clusters, counts, severities, and reasons.',
+  description: 'Summarize anomaly signals, counts, severities, and reasons.',
   props: AnomalySummaryPanelSchema,
   component: ({ props }) => {
     const items = asArray(props.items);
@@ -251,7 +251,7 @@ const AnomalySummaryPanel = defineComponent({
         <div className="analysis-card-head">
           <div>
             <div className="analysis-card-kicker">Anomaly Summary</div>
-            <h3 className="analysis-card-title">{asText(props.title, 'Detected anomaly clusters')}</h3>
+            <h3 className="analysis-card-title">{asText(props.title, 'Detected anomaly signals')}</h3>
           </div>
         </div>
         {metricItems.length > 0 ? (
@@ -276,7 +276,7 @@ const AnomalySummaryPanel = defineComponent({
             ))}
           </div>
         ) : (
-          <InlineEmptyState label="No anomaly clusters were included in this response." />
+          <InlineEmptyState label="No anomaly signals were included in this response." />
         )}
       </section>
     );
@@ -407,7 +407,7 @@ export const analysisPromptOptions = {
   ],
   examples: [
     'root = RunSummaryCard("RUN_123", "Anomaly-heavy batch", [{label:"Total traces", value:"248", tone:"cyan"}, {label:"Anomalies", value:"19", tone:"amber"}])',
-    'root = TraceEvidencePanel("Why Axial chose Acme", "The winner matched on name and standardized domain evidence.", {sourceEntityName:"Acme Holdings", sourceModule:"news", sourceUniqueId:"n_42"}, {winnerEntityName:"Acme Inc.", winnerEntityId:"EM_9", matchPhase:"url_resolution", matchType:"domain"}, [{label:"trace", value:"RUN_123:news:n_42", kind:"trace"}], [{anomalyType:"url_conflict", severity:"medium", reason:"Two candidate domains looked similar", count:1}])',
+    'root = TraceEvidencePanel("Why Axial resolved Acme", "The assigned entity matched on name and standardized domain evidence.", {sourceEntityName:"Acme Holdings", sourceModule:"news", sourceUniqueId:"n_42"}, {assignedEntityName:"Acme Inc.", assignedEntityId:"EM_9", matchPhase:"url_resolution", matchType:"domain"}, [{label:"source", value:"RUN_123:news:n_42", kind:"source"}], [{anomalyType:"url_conflict", severity:"medium", reason:"Two candidate domains looked similar", count:1}])',
   ],
 };
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { AppTopbar } from '../components/AppTopbar';
-import { ReviewWorkspace } from './ExplorerPage';
+import { ReviewWorkspace } from '../components/review/ReviewWorkspace';
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
 import {
   createReviewPublish,
@@ -33,12 +33,19 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [activePublishId, setActivePublishId] = useState<string | null>(null);
   const [lastPublishBatch, setLastPublishBatch] = useState<ReviewPublishBatch | null>(null);
+  const [publishBatchError, setPublishBatchError] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedCaseIds((current) =>
       current.filter((caseId) => explorer.reviewCases.some((item) => item.case_id === caseId)),
     );
   }, [explorer.reviewCases]);
+
+  useEffect(() => {
+    setActivePublishId(null);
+    setLastPublishBatch(null);
+    setPublishBatchError(null);
+  }, [selectedRunId]);
 
   useEffect(() => {
     if (!reviewCaseDetail) {
@@ -80,9 +87,13 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
   const publishMutation = useMutation({
     mutationFn: ({ runId, caseIds }: { runId: string; caseIds: string[] }) =>
       createReviewPublish(runId, caseIds),
+    onMutate: () => {
+      setPublishBatchError(null);
+    },
     onSuccess: (response) => {
       setActivePublishId(response.publish_id);
       setLastPublishBatch(null);
+      setPublishBatchError(null);
       setSelectedCaseIds([]);
     },
   });
@@ -91,15 +102,30 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
     queryKey: ['review-publish', activePublishId],
     queryFn: () => getReviewPublish(activePublishId!),
     enabled: Boolean(activePublishId),
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     refetchInterval: (query) => {
+      if (query.state.error) return false;
       const status = String(query.state.data?.status ?? '');
       return TERMINAL_PUBLISH_STATUSES.has(status) ? false : 2_000;
     },
   });
 
   useEffect(() => {
+    if (!activePublishId || !publishBatchQuery.error) return;
+    setPublishBatchError(
+      publishBatchQuery.error instanceof Error
+        ? publishBatchQuery.error.message
+        : 'Failed to load publish batch status.',
+    );
+    setActivePublishId(null);
+  }, [activePublishId, publishBatchQuery.error]);
+
+  useEffect(() => {
     const batch = publishBatchQuery.data;
     if (!batch || !TERMINAL_PUBLISH_STATUSES.has(batch.status)) return;
+    setPublishBatchError(null);
     setLastPublishBatch(batch);
     setActivePublishId(null);
     void Promise.all([
@@ -142,6 +168,8 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
           saveDecisionMutation={saveDecisionMutation}
           publishMutation={publishMutation}
           publishBatch={publishBatch}
+          publishBatchError={publishBatchError}
+          isPublishTracking={Boolean(activePublishId)}
           onSourceRecordSelected={openSourceRecord}
         />
       </div>

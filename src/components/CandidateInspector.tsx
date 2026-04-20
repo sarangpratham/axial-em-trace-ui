@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useLayoutEffect, useEffect } from 'react';
 import type { CandidateEvaluation } from '../types';
+import { candidateDispositionLabel, humanizeToken } from '../lib/sourceResolution';
 import { StatusBadge } from './StatusBadge';
 
 type Props = {
@@ -7,22 +8,19 @@ type Props = {
 };
 
 function scoreForCandidate(cand: CandidateEvaluation, idx: number, total: number): number {
-  // Derive a deterministic display score from available signals
-  // since the API doesn't expose a raw float score directly
-  if (cand.rank_key && cand.rank_key.length > 0) {
-    const primary = cand.rank_key[0];
-    const base = Math.max(0, 1 - (primary / (total + 1)));
-    return Math.min(0.99, base + (cand.is_match ? 0.1 : -0.1));
-  }
-  if (cand.is_match && idx === 0) return 0.95;
-  if (cand.is_match) return 0.7 - idx * 0.04;
-  return Math.max(0.05, 0.55 - idx * 0.08);
+  if (cand.final_candidate_status === 'selected') return 0.96;
+  if (cand.final_candidate_status === 'pending_review') return 0.64;
+  if (cand.final_candidate_status === 'viable_not_selected') return 0.56;
+  if (cand.evaluation_status === 'agent_required') return 0.42;
+  if (cand.evaluation_status === 'agent_insufficient') return 0.36;
+  if (cand.final_candidate_status === 'suppressed') return 0.22;
+  return Math.max(0.08, 0.24 - idx * (1 / Math.max(total, 1)));
 }
 
 function scoreColor(score: number): string {
-  if (score > 0.85) return 'var(--green)';
-  if (score > 0.65) return 'var(--cyan)';
-  if (score > 0.4) return 'var(--amber)';
+  if (score > 0.8) return 'var(--green)';
+  if (score > 0.55) return 'var(--cyan)';
+  if (score > 0.35) return 'var(--amber)';
   return 'var(--red)';
 }
 
@@ -38,9 +36,13 @@ function EvidenceRow({ label, value, url }: EvidenceRowProps) {
 
 const CHUNK_SIZE = 100;
 
+function candidateSelectionKey(candidate: CandidateEvaluation, index: number) {
+  return `${candidate.candidate_entity_id}:${candidate.match_phase || 'candidate'}:${index}`;
+}
+
 export function CandidateInspector({ candidates }: Props) {
-  const [selectedId, setSelectedId] = useState<string>(
-    candidates[0]?.candidate_id ?? '',
+  const [selectedKey, setSelectedKey] = useState<string>(
+    candidates[0] ? candidateSelectionKey(candidates[0], 0) : '',
   );
   const [visibleCount, setVisibleCount] = useState(CHUNK_SIZE);
   const tableWrapRef = useRef<HTMLDivElement>(null);
@@ -62,13 +64,21 @@ export function CandidateInspector({ candidates }: Props) {
   const scores = useMemo(
     () =>
       Object.fromEntries(
-        candidates.map((c, i) => [c.candidate_id, scoreForCandidate(c, i, candidates.length)]),
+        candidates.map((candidate, index) => [
+          candidateSelectionKey(candidate, index),
+          scoreForCandidate(candidate, index, candidates.length),
+        ]),
       ),
     [candidates],
   );
 
   const displayedCandidates = candidates.slice(0, visibleCount);
   const hasMore = visibleCount < candidates.length;
+
+  useEffect(() => {
+    setSelectedKey(candidates[0] ? candidateSelectionKey(candidates[0], 0) : '');
+    setVisibleCount(CHUNK_SIZE);
+  }, [candidates]);
 
   // Incremental rendering: gradually show more candidates on initial load
   useEffect(() => {
@@ -87,19 +97,21 @@ export function CandidateInspector({ candidates }: Props) {
   }, [candidates.length]);
 
   const selected = useMemo(
-    () => candidates.find((c) => c.candidate_id === selectedId) ?? candidates[0],
-    [candidates, selectedId],
+    () =>
+      candidates.find((candidate, index) => candidateSelectionKey(candidate, index) === selectedKey)
+      ?? candidates[0],
+    [candidates, selectedKey],
   );
 
   if (!candidates.length) {
     return (
       <div className="empty-state">
-        <p>No candidate evaluations captured for this entity.</p>
+        <p>No candidate evaluations were captured for this source.</p>
       </div>
     );
   }
 
-  const score = selected ? scores[selected.candidate_id] ?? 0 : 0;
+  const score = selected ? scores[selectedKey] ?? 0 : 0;
 
   return (
     <div className="candidate-wrap">
@@ -109,41 +121,49 @@ export function CandidateInspector({ candidates }: Props) {
           <thead>
             <tr>
               <th>#</th>
-              <th>Entity ID</th>
               <th>Candidate</th>
-              <th>Type</th>
-              <th>URL Status</th>
-              <th>Result</th>
+              <th>Phase</th>
+              <th>Rule</th>
+              <th>Route</th>
+              <th>Disposition</th>
             </tr>
           </thead>
           <tbody>
             {displayedCandidates.map((c, i) => {
+              const selectionKey = candidateSelectionKey(c, i);
               const rankCls = i === 0 ? 'rank-badge--winner' : i < 3 ? 'rank-badge--top' : '';
               return (
                 <tr
-                  key={`${c.search_kind}-${c.candidate_id}`}
-                  className={selectedId === c.candidate_id ? 'ctable-row--active' : ''}
-                  onClick={() => setSelectedId(c.candidate_id)}
+                  key={selectionKey}
+                  className={selectedKey === selectionKey ? 'ctable-row--active' : ''}
+                  onClick={() => setSelectedKey(selectionKey)}
                 >
                   <td>
                     <span className={`rank-badge ${rankCls}`}>{i + 1}</span>
                   </td>
-                  <td className="entity-id-cell">{c.candidate_id}</td>
-                  <td className="name-cell" title={c.candidate_name}>
-                    {c.candidate_name || c.candidate_id}
+                  <td className="name-cell" title={c.candidate_entity_name || c.candidate_entity_id}>
+                    <div>{c.candidate_entity_name || c.candidate_entity_id}</div>
+                    <span className="candidate-cell-meta candidate-cell-meta--muted">
+                      {c.candidate_entity_id}
+                    </span>
                   </td>
                   <td className="type-cell">
-                    <span style={{ fontSize: '10px' }}>
-                      {c.match_type?.replace(/_/g, ' ') || '—'}
+                    <span className="candidate-cell-meta">
+                      {humanizeToken(c.match_phase)}
                     </span>
                   </td>
                   <td>
-                    <span style={{ color: 'var(--text3)', fontSize: '10px' }}>
-                      {c.url_status || '—'}
+                    <span className="candidate-cell-meta">
+                      {humanizeToken(c.match_type)}
                     </span>
                   </td>
                   <td>
-                    <StatusBadge label={c.is_match ? 'master_match' : 'no_match'} />
+                    <span className="candidate-cell-meta candidate-cell-meta--muted">
+                      {humanizeToken(c.resolution_route || c.decision_source || c.agent_lane, 'deterministic')}
+                    </span>
+                  </td>
+                  <td>
+                    <StatusBadge label={c.final_candidate_status || c.evaluation_status} />
                   </td>
                 </tr>
               );
@@ -151,18 +171,10 @@ export function CandidateInspector({ candidates }: Props) {
           </tbody>
         </table>
         {hasMore && (
-          <div style={{ textAlign: 'center', padding: '10px' }}>
+          <div className="candidate-load-more-wrap">
             <button
               onClick={() => setVisibleCount(prev => Math.min(prev + CHUNK_SIZE, candidates.length))}
-              style={{
-                background: 'var(--bg3)',
-                border: '1px solid var(--border)',
-                color: 'var(--text)',
-                borderRadius: '4px',
-                padding: '6px 12px',
-                cursor: 'pointer',
-                fontSize: '11px',
-              }}
+              className="candidate-load-more"
             >
               Load more…
             </button>
@@ -174,27 +186,33 @@ export function CandidateInspector({ candidates }: Props) {
       {selected && (
         <div className="evidence-pane" ref={evidenceRef}>
           <div className="evidence-pane-head">
-            <div className="evidence-pane-name" title={selected.candidate_name}>
-              {selected.candidate_name || selected.candidate_id}
+            <div className="evidence-pane-name" title={selected.candidate_entity_name || selected.candidate_entity_id}>
+              {selected.candidate_entity_name || selected.candidate_entity_id}
             </div>
             <span className="evidence-score" style={{ color: scoreColor(score) }}>
               {score.toFixed(2)}
             </span>
           </div>
           <div className="evidence-rows">
-            <EvidenceRow label="URL" value={selected.candidate_url} url />
+            <EvidenceRow label="URL" value={selected.candidate_entity_url} url />
+            <EvidenceRow label="Candidate ID" value={selected.candidate_entity_id} />
+            <EvidenceRow label="Evaluation Score" value={score.toFixed(2)} />
             <EvidenceRow label="Phase" value={selected.match_phase} />
-            <EvidenceRow label="Match Type" value={selected.match_type?.replace(/_/g, ' ')} />
-            <EvidenceRow label="Name Match" value={selected.name_match_type} />
-            <EvidenceRow label="URL Status" value={selected.url_status} />
-            <EvidenceRow label="URL Decision" value={selected.url_decision?.replace(/_/g, ' ')} />
-            <EvidenceRow label="Src Field" value={selected.source_field} />
-            <EvidenceRow label="Tgt Field" value={selected.target_field} />
-            <EvidenceRow label="Matched Src" value={selected.matched_source_name} />
-            <EvidenceRow label="Matched Tgt" value={selected.matched_target_name} />
+            <EvidenceRow label="Match Rule" value={humanizeToken(selected.match_type)} />
+            <EvidenceRow label="Decision Source" value={humanizeToken(selected.decision_source)} />
+            <EvidenceRow label="Agent Lane" value={humanizeToken(selected.agent_lane)} />
+            <EvidenceRow label="Resolution Route" value={humanizeToken(selected.resolution_route || selected.url_decision, 'deterministic')} />
+            <EvidenceRow label="Blocked Reason" value={humanizeToken(selected.blocked_reason)} />
+            <EvidenceRow label="Evaluation Status" value={humanizeToken(selected.evaluation_status)} />
+            <EvidenceRow label="Agent Decision" value={humanizeToken(selected.agent_decision)} />
+            <EvidenceRow label="Agent Confidence" value={selected.agent_confidence} />
+            <EvidenceRow label="Final Disposition" value={candidateDispositionLabel(selected.final_candidate_status)} />
+            <EvidenceRow label="Suppression Reason" value={humanizeToken(selected.suppression_reason)} />
+            <EvidenceRow label="Name Match Type" value={humanizeToken(selected.name_match_type)} />
+            <EvidenceRow label="URL Decision" value={humanizeToken(selected.url_decision)} />
           </div>
           <div className="reason-block">
-            {selected.context_reason || 'No reasoning captured.'}
+            {selected.agent_reason || 'No reasoning captured.'}
           </div>
         </div>
       )}

@@ -1,10 +1,10 @@
 # Decision Tracer UI
 
-A run inspector for entity matching with three views:
+A run inspector for entity matching with three workspaces:
 
-- `Explorer` for the existing deterministic record-by-record flow
+- `Explorer` for the sequential source-resolution flow
 - `Chat` for the AI-assisted postmortem workspace
-- `Graph` for a preview-first graph view of source records, clusters, and masters
+- `Review` for human review and publish decisions
 
 ## Setup
 
@@ -21,14 +21,14 @@ Create a local `.env` file with:
 VITE_INSIGHTS_API_BASE_URL=http://localhost:5003/api/v1
 ```
 
-- `VITE_INSIGHTS_API_BASE_URL` is used by Explorer, Chat, and Graph.
+- `VITE_INSIGHTS_API_BASE_URL` is used by Explorer, Chat, and Review.
 
 ## Routes
 
-- `/explorer` keeps the existing deterministic decision explorer
-- `/chat` keeps the existing analysis workspace UI, relabeled as Chat
-- `/graph` adds the new preview-first graph workspace
-- `/analysis` remains as a redirect to `/chat` for compatibility
+- `/explorer` is the primary source-resolution workspace
+- `/chat` is the analysis workspace
+- `/review` is the human review workspace
+- unknown routes render a not-found page
 
 ## Build
 

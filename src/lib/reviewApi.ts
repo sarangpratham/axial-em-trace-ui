@@ -8,10 +8,11 @@ import type {
 } from '../types';
 
 const INSIGHTS_API_BASE_URL =
-  import.meta.env.VITE_INSIGHTS_API_BASE_URL || 'http://localhost:5003/api/v1';
+  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}).VITE_INSIGHTS_API_BASE_URL
+  || 'http://localhost:5003/api/v1';
 
 const REVIEW_API_BASE_URL =
-  import.meta.env.VITE_REVIEW_API_BASE_URL
+  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}).VITE_REVIEW_API_BASE_URL
   || INSIGHTS_API_BASE_URL.replace(/\/api\/v1$/, '/review-service/api/v1');
 
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {

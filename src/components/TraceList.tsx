@@ -27,7 +27,7 @@ export function TraceList({ traces, selectedTraceId, activeAnomalyType, onSelect
 
   if (!deferredTraces.length) {
     return (
-      <div style={{ padding: '20px 14px', color: 'var(--text3)', fontSize: '11px', textAlign: 'center' }}>
+      <div className="trace-list-empty">
         No entities match current filters.
       </div>
     );
@@ -47,7 +47,7 @@ export function TraceList({ traces, selectedTraceId, activeAnomalyType, onSelect
           >
             <div className="tr-head">
               <div className="tr-name">{trace.source_entity_name}</div>
-              <StatusBadge label={trace.final_status} />
+              <StatusBadge label={trace.resolution_status} />
             </div>
             <div className="tr-meta">
               {trace.source_module} · {trace.source_unique_id}
@@ -55,9 +55,9 @@ export function TraceList({ traces, selectedTraceId, activeAnomalyType, onSelect
             <div className="tr-story">{trace.decision_story}</div>
             <div className="tr-foot">
               <span className="tr-counts">
-                {trace.candidate_count} cands · {trace.matched_candidate_count} pos
+                {trace.candidate_count} candidates · {trace.viable_candidate_count} viable
               </span>
-              {trace.winner_origin && <StatusBadge label={trace.winner_origin} />}
+              {trace.decision_source && <StatusBadge label={trace.decision_source} />}
               {trace.has_anomalies && (
                 <AnomalyBadge count={trace.anomaly_count || 0} severity={trace.anomaly_severity || undefined} />
               )}

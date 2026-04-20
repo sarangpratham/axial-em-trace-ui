@@ -2,32 +2,23 @@ import type {
   AnomalyRecord,
   CandidateEvaluation,
   RunSummary,
-  SourceRecordDetail as InsightsSourceRecordDetail,
+  SourceRecordDetail,
   TraceDetail,
   TraceSummary,
 } from '../types';
+import {
+  candidateDispositionLabel,
+  humanizeToken,
+  normalizeSourceResolutionStatus,
+  sourceResolutionLabel,
+} from './sourceResolution';
 
 const INSIGHTS_API_BASE_URL =
-  import.meta.env.VITE_INSIGHTS_API_BASE_URL || 'http://localhost:5003/api/v1';
+  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {})
+    .VITE_INSIGHTS_API_BASE_URL || 'http://localhost:5003/api/v1';
 
 type InsightsRunListItem = {
   run_id: string;
-};
-
-type InsightsRunSummaryPayload = {
-  source_record_count?: number;
-  anomaly_total?: number;
-  anomaly_by_type?: Record<string, number>;
-  anomaly_by_severity?: Record<string, number>;
-  open_review_case_count?: number;
-  reviewed_unpublished_case_count?: number;
-  publish_blocked_case_count?: number;
-  publish_failed_case_count?: number;
-  published_case_count?: number;
-  parent_processing_status?: string;
-  parent_processing_deferred?: boolean;
-  deferred_parent_observation_count?: number;
-  result?: Record<string, unknown>;
 };
 
 async function request<T>(path: string): Promise<T> {
@@ -45,70 +36,48 @@ export async function getRuns() {
 }
 
 export async function getRunSummary(runId: string): Promise<RunSummary> {
-  const summary = await request<InsightsRunSummaryPayload>(
+  const summary = await request<Record<string, unknown>>(
     `/runs/${encodeURIComponent(runId)}/summary`,
   );
-  const result = summary.result ?? {};
-  const totalTraces = Number(summary.source_record_count ?? 0);
-  const matchedCount = readNumber(
-    result.matched_existing_entity_count,
-    result.reused_entity_count,
-    result.matched_count,
-  );
-  const newEntityCount = readNumber(
-    result.created_entity_count,
-    result.new_entity_count,
-  );
-  const noMatchCount = Math.max(
-    0,
-    readNumber(
-      result.no_match_count,
-      totalTraces - matchedCount - newEntityCount,
-    ),
-  );
-
   return {
-    total_traces: totalTraces,
-    matched_count: matchedCount,
-    new_entity_count: newEntityCount,
-    no_match_count: noMatchCount,
+    run_id: String(summary.run_id || runId),
+    status: asNullableText(summary.status),
+    processed_source_count: readNumber(summary.processed_source_count),
+    resolved_existing_master_count: readNumber(summary.resolved_existing_master_count),
+    created_new_master_count: readNumber(summary.created_new_master_count),
+    pending_review_source_count: readNumber(summary.pending_review_source_count),
+    candidate_evaluation_count: readNumber(summary.candidate_evaluation_count),
+    deterministic_accept_count: readNumber(summary.deterministic_accept_count),
+    deterministic_reject_count: readNumber(summary.deterministic_reject_count),
+    url_agent_call_count: readNumber(summary.url_agent_call_count),
+    context_agent_call_count: readNumber(summary.context_agent_call_count),
     open_review_case_count: readNumber(summary.open_review_case_count),
     reviewed_unpublished_case_count: readNumber(summary.reviewed_unpublished_case_count),
     publish_blocked_case_count: readNumber(summary.publish_blocked_case_count),
     publish_failed_case_count: readNumber(summary.publish_failed_case_count),
     published_case_count: readNumber(summary.published_case_count),
-    parent_processing_status: typeof summary.parent_processing_status === 'string'
-      ? summary.parent_processing_status
-      : 'pending',
+    parent_processing_status: asNullableText(summary.parent_processing_status) ?? 'pending',
     parent_processing_deferred: Boolean(summary.parent_processing_deferred),
     deferred_parent_observation_count: readNumber(summary.deferred_parent_observation_count),
-    anomaly_total: Number(summary.anomaly_total ?? 0),
-    anomaly_by_type: summary.anomaly_by_type ?? {},
-    anomaly_by_severity: summary.anomaly_by_severity ?? {},
-    unexpected_phase_winner: readNumber(result.unexpected_phase_winner),
-    url_blocked_good_match: readNumber(result.url_blocked_good_match),
-    no_match_with_good_candidates: readNumber(result.no_match_with_good_candidates),
-    multiple_master_duplicates: readNumber(result.multiple_master_duplicates),
-    embedding_override_exact_url: readNumber(result.embedding_override_exact_url),
-    cross_url_winner: readNumber(result.cross_url_winner),
-    context_winner: readNumber(result.context_winner),
-    tie_in_ranking: readNumber(result.tie_in_ranking),
-    master_id_inconsistency: readNumber(result.master_id_inconsistency),
+    anomaly_total: readNumber(summary.anomaly_total),
+    anomaly_by_type: readObject(summary.anomaly_by_type) as Record<string, number>,
+    anomaly_by_severity: readObject(summary.anomaly_by_severity) as Record<string, number>,
   };
 }
 
 export async function getTraces(params: {
   runId: string;
   module?: string;
-  finalStatus?: string;
-  winnerOrigin?: string;
+  resolutionStatus?: string;
+  decisionSource?: string;
   query?: string;
   hasAnomalies?: boolean;
   anomalyType?: string;
 }) {
   const search = new URLSearchParams({ limit: '500', offset: '0' });
   if (params.module) search.set('module', params.module);
-  if (params.finalStatus) search.set('final_status', params.finalStatus);
+  if (params.resolutionStatus) search.set('resolution_status', params.resolutionStatus);
+  if (params.decisionSource) search.set('decision_source', params.decisionSource);
   if (params.query?.trim()) search.set('query', params.query.trim());
   if (params.hasAnomalies != null) search.set('has_anomalies', String(params.hasAnomalies));
 
@@ -123,15 +92,13 @@ export async function getTraces(params: {
           ),
         )
       : new Map<string, AnomalyRecord[]>();
+
   let traces = records.map((record) =>
     mapSourceRecordListItem(record, anomalyIndex.get(String(record.source_trace_id || ''))),
   );
 
-  if (params.winnerOrigin) {
-    traces = traces.filter((trace) => trace.winner_origin === params.winnerOrigin);
-  }
   if (params.anomalyType) {
-    traces = traces.filter((trace) => trace.anomaly_types?.includes(params.anomalyType || ''));
+    traces = traces.filter((trace) => trace.anomaly_types.includes(params.anomalyType || ''));
   }
 
   return traces;
@@ -142,7 +109,7 @@ export async function getTraceDetail(
   sourceModule: string,
   sourceUniqueId: string,
 ): Promise<TraceDetail> {
-  const detail = await request<InsightsSourceRecordDetail>(
+  const detail = await request<SourceRecordDetail>(
     `/runs/${encodeURIComponent(runId)}/source-records/${encodeURIComponent(sourceModule)}/${encodeURIComponent(sourceUniqueId)}?view=explorer`,
   );
   return mapSourceRecordDetail(detail);
@@ -177,135 +144,72 @@ function mapSourceRecordListItem(
   anomalies?: AnomalyRecord[],
 ): TraceSummary {
   const anomalyItems = anomalies ?? [];
+  const resolutionStatus =
+    normalizeSourceResolutionStatus(asNullableText(item.resolution_status))
+    ?? asNullableText(item.resolution_status);
+  const derivedEnrichment = readObject(item.derived_enrichment);
+
   return {
     run_id: String(item.run_id || ''),
     source_trace_id: String(item.source_trace_id || ''),
     source_module: String(item.source_module || ''),
     source_unique_id: String(item.source_unique_id || ''),
     source_entity_name: asText(item.source_entity_name, asText(item.source_unique_id)),
-    source_member_name: asText(item.source_member_name),
-    source_entity_role: asText(item.source_entity_role),
-    search_stage: asNullableText(item.stage),
-    final_status: asNullableText(item.final_status),
-    winner_entity_id: asNullableText(item.assigned_entity_id),
-    winner_entity_name: asNullableText(item.assigned_entity_name),
-    winner_origin: asNullableText(item.assignment_kind),
+    source_member_name: asNullableText(item.source_member_name),
+    source_entity_role: asNullableText(item.source_entity_role),
+    phase: asText(item.phase, 'main'),
+    resolution_status: resolutionStatus,
+    decision_source: asNullableText(item.decision_source),
+    assigned_entity_id: asNullableText(item.assigned_entity_id),
+    assigned_entity_name: asNullableText(item.assigned_entity_name),
+    matched_master_id: asNullableText(item.matched_master_id),
     candidate_count: readNumber(item.candidate_count),
-    matched_candidate_count: readNumber(item.matched_candidate_count),
+    viable_candidate_count: readNumber(item.viable_candidate_count),
+    anomaly_count: readNumber(item.anomaly_count),
+    lineages_target_record_ids: Array.isArray(item.lineages_target_record_ids)
+      ? item.lineages_target_record_ids.map((value) => String(value))
+      : [],
+    derived_enrichment: derivedEnrichment,
+    updated_at: asNullableText(item.updated_at),
     decision_story: buildDecisionStory(item),
-    pre_match_enrichment: readObject(item.graph_links).derived_enrichment as Record<string, unknown> | null | undefined,
     has_anomalies: anomalyItems.length > 0 || readNumber(item.anomaly_count) > 0,
-    anomaly_count: anomalyItems.length || readNumber(item.anomaly_count),
     anomaly_types: uniqueStrings(anomalyItems.map((anomaly) => anomaly.anomaly_type)),
     anomaly_severity: highestSeverity(anomalyItems),
   };
 }
 
-function mapSourceRecordDetail(detail: InsightsSourceRecordDetail): TraceDetail {
-  const summary = mapSourceRecordListItem(detail, detail.anomalies);
-  const candidateResults = buildCandidateEvaluations(detail);
-  const searches =
-    Array.isArray(detail.searches) && detail.searches.length > 0
-      ? detail.searches
-      : buildSyntheticSearches(candidateResults);
-  const outcomeConfidence =
-    asNumber(detail.assignment?.confidence)
-    ?? asNumber(detail.assignment?.score)
-    ?? bestCandidateScore(candidateResults);
-
+function mapSourceRecordDetail(detail: SourceRecordDetail): TraceDetail {
+  const summary = mapSourceRecordListItem(detail as unknown as Record<string, unknown>, detail.anomalies);
   return {
+    ...detail,
     ...summary,
-    trace_payload: {
-      source_entity: detail.source ?? {},
-      searches,
-      final_outcome: {
-        status: detail.final_status,
-        method: detail.assignment?.method ?? detail.assignment_kind ?? detail.stage ?? null,
-        confidence: outcomeConfidence,
-        cluster_id: detail.cluster_id ?? detail.assignment?.cluster_id ?? null,
-        assigned_entity_id: detail.assigned_entity_id ?? detail.assignment?.assigned_entity_id ?? null,
-      },
-      pre_match_enrichment: detail.derived_enrichment ?? {},
-    },
-    ranked_candidate_results: candidateResults,
-    graph: { nodes: [], edges: [] },
-    anomalies: detail.anomalies ?? [],
-    anomaly_count: detail.anomaly_count ?? detail.anomalies.length,
+    candidate_evaluations: buildCandidateEvaluations(detail.candidate_evaluations),
   };
 }
 
-function buildCandidateEvaluations(detail: InsightsSourceRecordDetail): CandidateEvaluation[] {
-  const sorted = [...detail.edge_details]
-    .filter((edge) => edge.edge_kind === 'peer' || edge.edge_kind === 'to_master')
-    .sort((left, right) => {
-      const scoreDelta = (asNumber(right.score) ?? -1) - (asNumber(left.score) ?? -1);
-      if (scoreDelta !== 0) return scoreDelta;
-      return rankOutcome(right.status) - rankOutcome(left.status);
-    });
-
-  return sorted.map((edge, index) => {
-    const targetMaster = edge.target_master;
-    const targetSource = edge.target_source_record;
-    const candidateId =
-      targetMaster?.entity_id
-      || targetSource?.source_trace_id
-      || edge.target_id;
-    const candidateName =
-      targetMaster?.entity_name
-      || targetSource?.source_entity_name
-      || targetSource?.source_unique_id
-      || edge.target_id;
-    const score = asNumber(edge.score);
-    const rankKey = score == null ? undefined : [Math.max(0, 1000 - Math.round(score * 1000)), index];
-
-    return {
-      search_kind: edge.match_phase || edge.edge_kind || 'candidate_review',
-      candidate_id: candidateId,
-      candidate_name: candidateName || candidateId,
-      candidate_url: targetMaster?.entity_url || '',
-      is_match: edge.status === 'confirmed' || edge.status === 'resolved',
-      match_phase: edge.match_phase || edge.edge_kind || 'candidate_review',
-      match_type: edge.match_type || edge.edge_kind || 'candidate_review',
-      name_match_type: undefined,
-      url_status: edge.url_decision || edge.status || 'unknown',
-      url_decision: edge.url_decision || edge.resolution_route || edge.status || 'unknown',
-      source_field: undefined,
-      target_field: undefined,
-      matched_source_name: detail.source_entity_name || undefined,
-      matched_target_name: candidateName || undefined,
-      context_reason: edge.agent_reason || edge.blocked_reason || edge.resolution_route || undefined,
-      rank_key: rankKey,
-    };
-  });
-}
-
-function buildSyntheticSearches(
-  candidates: CandidateEvaluation[],
-): Array<Record<string, unknown>> {
-  const grouped = new Map<string, CandidateEvaluation[]>();
-  for (const candidate of candidates) {
-    const key = candidate.search_kind || 'candidate_review';
-    const bucket = grouped.get(key);
-    if (bucket) bucket.push(candidate);
-    else grouped.set(key, [candidate]);
-  }
-
-  const searches = Array.from(grouped.entries()).map(([searchKind, rows]) => ({
-    search_kind: searchKind,
-    potential_candidates: rows.map((row) => ({
-      candidate_id: row.candidate_id,
-      candidate_name: row.candidate_name,
-      candidate_url: row.candidate_url,
-      is_match: row.is_match,
-    })),
-    redis_query: null,
+function buildCandidateEvaluations(
+  items: CandidateEvaluation[],
+): CandidateEvaluation[] {
+  return [...items].map((item) => ({
+    ...item,
+    evaluation_status: asText(item.evaluation_status, 'unknown'),
+    final_candidate_status: asText(item.final_candidate_status, 'unknown'),
+    match_phase: asNullableText(item.match_phase),
+    match_type: asNullableText(item.match_type),
+    name_match_type: asNullableText(item.name_match_type),
+    url_status: asNullableText(item.url_status),
+    url_decision: asNullableText(item.url_decision),
+    blocked_reason: asNullableText(item.blocked_reason),
+    resolution_route: asNullableText(item.resolution_route),
+    resolution_attempt_id: asNullableText(item.resolution_attempt_id),
+    decision_source: asNullableText(item.decision_source),
+    agent_lane: asNullableText(item.agent_lane),
+    agent_decision: asNullableText(item.agent_decision),
+    agent_confidence: asNullableText(item.agent_confidence),
+    agent_reason: asNullableText(item.agent_reason),
+    suppression_reason: asNullableText(item.suppression_reason),
+    evaluation_payload: readObject(item.evaluation_payload),
   }));
-
-  if (searches.length > 0) {
-    return searches;
-  }
-
-  return [];
 }
 
 function buildAnomalyIndex(anomalies: AnomalyRecord[]) {
@@ -321,16 +225,17 @@ function buildAnomalyIndex(anomalies: AnomalyRecord[]) {
 
 function buildDecisionStory(item: Record<string, unknown>) {
   const entity = asText(item.source_entity_name, asText(item.source_unique_id, 'This record'));
-  const finalStatus = asText(item.final_status, 'unknown');
-  const parts = [entity, 'ended as', finalStatus + '.'];
-  if (item.cluster_id) {
-    parts.push(`Match group ${item.cluster_id} was selected.`);
-  }
+  const resolutionStatus = sourceResolutionLabel(asNullableText(item.resolution_status));
+  const parts = [`${entity} resolved as ${resolutionStatus}.`];
   if (item.assigned_entity_id) {
-    parts.push(`Assigned entity is ${item.assigned_entity_id}.`);
+    parts.push(`Selected entity is ${item.assigned_entity_id}.`);
+  }
+  const decisionSource = asNullableText(item.decision_source);
+  if (decisionSource) {
+    parts.push(`Decision source: ${humanizeToken(decisionSource, 'unknown')}.`);
   }
   if (readNumber(item.anomaly_count) > 0) {
-    parts.push(`${readNumber(item.anomaly_count)} anomalies were recorded.`);
+    parts.push(`${readNumber(item.anomaly_count)} anomaly signals were recorded.`);
   }
   return parts.join(' ');
 }
@@ -383,23 +288,6 @@ function readNumber(...values: unknown[]) {
   return 0;
 }
 
-function rankOutcome(status: string | null | undefined) {
-  switch ((status || '').toLowerCase()) {
-    case 'confirmed':
-      return 4;
-    case 'resolved':
-      return 3;
-    case 'blocked':
-      return 2;
-    case 'rejected':
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-function bestCandidateScore(candidates: CandidateEvaluation[]) {
-  const best = candidates[0]?.rank_key?.[0];
-  if (best == null) return null;
-  return Math.max(0, Math.min(1, 1 - best / 1000));
+export function candidateStatusText(candidate: CandidateEvaluation) {
+  return candidateDispositionLabel(candidate.final_candidate_status || candidate.evaluation_status);
 }

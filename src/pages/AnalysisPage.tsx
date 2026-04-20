@@ -4,7 +4,6 @@ import { Renderer } from '@openuidev/react-lang';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AppTopbar } from '../components/AppTopbar';
-import { StatusBadge } from '../components/StatusBadge';
 import { analysisLibrary } from '../components/analysis/openuiLibrary';
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
 import {
@@ -260,12 +259,16 @@ function ThreadRail({
 }
 
 function AnalysisCanvas({ explorer, latestAssistantText, isRunning, onClose }: { explorer: TraceExplorerState; latestAssistantText: string; isRunning: boolean; onClose: () => void }) {
+  const hasPinnedFilters = Boolean(
+    explorer.moduleFilter || explorer.statusFilter || explorer.decisionSourceFilter || explorer.searchInput,
+  );
+
   return (
     <div className="analysis-canvas-shell">
       <div className="analysis-rail-head">
         <div>
           <div className="analysis-rail-label">Evidence Canvas</div>
-          <div className="analysis-rail-sub">Pinned context, selected trace, and rendered response</div>
+          <div className="analysis-rail-sub">Run-scoped context, active filters, and rendered response</div>
         </div>
         <button type="button" className="analysis-ghost-button" onClick={onClose}>
           Close
@@ -277,46 +280,25 @@ function AnalysisCanvas({ explorer, latestAssistantText, isRunning, onClose }: {
           <div className="analysis-card-head">
             <div>
               <div className="analysis-card-kicker">Current Scope</div>
-              <h3 className="analysis-card-title">{explorer.selectedRunId || 'No run selected'}</h3>
+              <h3 className="analysis-card-title">Free-form run analysis</h3>
             </div>
           </div>
-          <div className="analysis-context-strip">
-            {explorer.selectedRunId && <span className="analysis-pill">run · {explorer.selectedRunId}</span>}
-            {explorer.moduleFilter && <span className="analysis-pill">module · {explorer.moduleFilter}</span>}
-            {explorer.statusFilter && <span className="analysis-pill">status · {explorer.statusFilter}</span>}
-            {explorer.searchInput && <span className="analysis-pill">query · {explorer.searchInput}</span>}
-          </div>
-          {explorer.selectedTrace && (
-            <div className="analysis-inline-grid analysis-selected-trace">
-              <div className="analysis-inline-panel">
-                <span className="analysis-inline-label">Selected trace</span>
-                <strong>{explorer.selectedTrace.source_entity_name}</strong>
-                <span>{explorer.selectedTrace.source_module} · {explorer.selectedTrace.source_unique_id}</span>
-              </div>
-              <div className="analysis-inline-panel">
-                <span className="analysis-inline-label">Current outcome</span>
-                <strong>{explorer.selectedTrace.final_status || 'unknown'}</strong>
-                <span>{explorer.selectedTrace.winner_entity_name || explorer.selectedTrace.winner_entity_id || 'No winner recorded'}</span>
-              </div>
+          <p className="analysis-story-block">
+            Chat stays scoped to the selected run and does not pin a source record or master entity unless you explicitly ask it to.
+          </p>
+          {hasPinnedFilters ? (
+            <div className="analysis-context-strip">
+              {explorer.moduleFilter && <span className="analysis-pill">module · {explorer.moduleFilter}</span>}
+              {explorer.statusFilter && <span className="analysis-pill">status · {explorer.statusFilter}</span>}
+              {explorer.decisionSourceFilter && <span className="analysis-pill">decision source · {explorer.decisionSourceFilter}</span>}
+              {explorer.searchInput && <span className="analysis-pill">query · {explorer.searchInput}</span>}
+            </div>
+          ) : (
+            <div className="analysis-empty-thread analysis-empty-canvas">
+              <p>No explorer filters are pinned into chat right now.</p>
             </div>
           )}
         </section>
-
-        {explorer.detail && (
-          <section className="analysis-card">
-            <div className="analysis-card-head">
-              <div>
-                <div className="analysis-card-kicker">Deterministic Snapshot</div>
-                <h3 className="analysis-card-title">{explorer.detail.source_entity_name}</h3>
-              </div>
-              <div className="analysis-context-strip">
-                <StatusBadge label={explorer.detail.final_status} />
-                {explorer.detail.winner_origin && <StatusBadge label={explorer.detail.winner_origin} />}
-              </div>
-            </div>
-            <p className="analysis-story-block">{explorer.detail.decision_story}</p>
-          </section>
-        )}
 
         <section className="analysis-card analysis-card--component">
           <div className="analysis-card-head">
@@ -340,7 +322,7 @@ function AnalysisCanvas({ explorer, latestAssistantText, isRunning, onClose }: {
   );
 }
 
-function AnalysisWorkspace({ explorer, userKey }: { explorer: TraceExplorerState; userKey: string }) {
+function AnalysisWorkspace({ explorer }: { explorer: TraceExplorerState }) {
   const { messages, isRunning, threadError, processMessage, cancelMessage } = useThread();
   const { threads, isLoadingThreads, loadThreads, selectedThreadId, selectThread, switchToNewThread, deleteThread } = useThreadList();
   const [composer, setComposer] = useState('');
@@ -388,10 +370,8 @@ function AnalysisWorkspace({ explorer, userKey }: { explorer: TraceExplorerState
       <div className="analysis-workspace">
         <div className="analysis-toolbar">
           <div className="analysis-toolbar-copy">
-            <div className="analysis-context-strip">
-              {explorer.selectedRunId && <span className="analysis-pill">Run · {explorer.selectedRunId}</span>}
-              {explorer.selectedTrace && <span className="analysis-pill">Trace · {explorer.selectedTrace.source_module}:{explorer.selectedTrace.source_unique_id}</span>}
-            </div>
+            <div className="analysis-rail-label">Run-scoped chat</div>
+            <div className="analysis-rail-sub">Ask free-form questions about the selected run without preselecting a source record or entity.</div>
           </div>
           <div className="analysis-toolbar-actions">
             <button type="button" className={`analysis-ghost-button${isLeftDrawerOpen ? ' analysis-toolbar-toggle--active' : ''}`} onClick={() => setIsLeftDrawerOpen((value) => !value)}>
@@ -436,13 +416,11 @@ function AnalysisWorkspace({ explorer, userKey }: { explorer: TraceExplorerState
           </aside>
 
           <main className="analysis-chat-panel">
-            <div className="analysis-chat-head">
-              <div>
-                <div className="analysis-rail-label">Chat</div>
-                <div className="analysis-rail-sub">OpenUI + backend-persisted history for browser user {userKey.slice(-8)}</div>
+            {threadError && (
+              <div className="analysis-chat-head">
+                <span className="analysis-pill">error · {threadError.message}</span>
               </div>
-              {threadError && <span className="analysis-pill">error · {threadError.message}</span>}
-            </div>
+            )}
 
             <Transcript messages={messages} isRunning={isRunning} />
 
@@ -450,7 +428,7 @@ function AnalysisWorkspace({ explorer, userKey }: { explorer: TraceExplorerState
               <textarea
                 className="analysis-composer-input"
                 rows={4}
-                placeholder={explorer.selectedRunId ? `Ask about run ${explorer.selectedRunId}…` : 'Select a run in Explorer or ask a general postmortem question…'}
+                placeholder={explorer.selectedRunId ? 'Ask about this run… Cmd/Ctrl+Enter' : 'Pick a run… Cmd/Ctrl+Enter'}
                 value={composer}
                 onChange={(event) => setComposer(event.target.value)}
                 onKeyDown={(event) => {
@@ -460,15 +438,6 @@ function AnalysisWorkspace({ explorer, userKey }: { explorer: TraceExplorerState
                   }
                 }}
               />
-              <div className="analysis-composer-toolbar">
-                <div className="analysis-context-strip">
-                  <span className="analysis-pill">Cmd/Ctrl + Enter to send</span>
-                  {selectedThreadId && <span className="analysis-pill">Thread · {selectedThreadId.slice(0, 12)}</span>}
-                </div>
-                <button type="button" className="analysis-submit-button" onClick={() => void submitPrompt(composer)} disabled={!composer.trim() || isRunning}>
-                  {isRunning ? 'Running…' : 'Send'}
-                </button>
-              </div>
             </div>
           </main>
 
@@ -512,7 +481,7 @@ export function AnalysisPage({ explorer }: { explorer: TraceExplorerState }) {
       deleteThread={(threadId) => deleteAnalysisThread(userKey, threadId)}
       streamProtocol={openAIAdapter()}
     >
-      <AnalysisWorkspace explorer={explorer} userKey={userKey} />
+      <AnalysisWorkspace explorer={explorer} />
     </ChatProvider>
   );
 }
