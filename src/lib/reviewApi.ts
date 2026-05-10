@@ -6,35 +6,14 @@ import type {
   ReviewPublishResponse,
   RunPublishSummary,
 } from '../types';
-
-const INSIGHTS_API_BASE_URL =
-  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}).VITE_INSIGHTS_API_BASE_URL
-  || 'http://localhost:5003/api/v1';
-
-const REVIEW_API_BASE_URL =
-  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}).VITE_REVIEW_API_BASE_URL
-  || INSIGHTS_API_BASE_URL.replace(/\/api\/v1$/, '/review-service/api/v1');
+import {
+  INSIGHTS_API_BASE_URL,
+  REVIEW_API_BASE_URL,
+  requestApiJson,
+} from './http.ts';
 
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-  if (!response.ok) {
-    let detail = `Request failed: ${response.status}`;
-    try {
-      const payload = await response.json();
-      detail = String(payload.detail || payload.message || detail);
-    } catch {
-      // ignore body parse errors
-    }
-    throw new Error(detail);
-  }
-  const payload = await response.json();
-  return (payload.data ?? payload) as T;
+  return requestApiJson<T>(baseUrl, path, init);
 }
 
 export function getReviewCases(params: {

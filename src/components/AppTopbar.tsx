@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useState, type ReactNode } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext.tsx';
 import { useTheme } from '../theme';
 
 export function AppTopbar({
@@ -15,7 +16,21 @@ export function AppTopbar({
   selectedRunId?: string;
   onRunChange?: (runId: string) => void;
 }) {
+  const navigate = useNavigate();
   const { mode, toggleMode } = useTheme();
+  const { user, logout } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
 
   return (
     <header className={`topbar topbar--${currentView}`}>
@@ -63,6 +78,12 @@ export function AppTopbar({
             </select>
           </label>
         )}
+        {user && (
+          <div className="topbar-user-pill" title={user.email}>
+            <span className="topbar-user-label">Signed in</span>
+            <span className="topbar-user-email">{user.email}</span>
+          </div>
+        )}
         <button
           type="button"
           className="theme-toggle"
@@ -72,6 +93,16 @@ export function AppTopbar({
         >
           <span className="theme-toggle-label">Theme</span>
           <span className="theme-toggle-value">{mode === 'light' ? 'Light' : 'Dark'}</span>
+        </button>
+        <button
+          type="button"
+          className="topbar-logout"
+          onClick={() => {
+            void handleLogout();
+          }}
+          disabled={isLoggingOut}
+        >
+          {isLoggingOut ? 'Signing out…' : 'Logout'}
         </button>
         {statusSlot}
       </div>

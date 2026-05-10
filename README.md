@@ -35,3 +35,9 @@ VITE_INSIGHTS_API_BASE_URL=http://localhost:5003/api/v1
 ```bash
 npm run build
 ```
+
+## Auth
+
+- The UI opens at `/login` and redirects authenticated users to `/explorer`.
+- Keep the UI and API on the same host label in local development, such as `localhost` with `localhost`, so the session cookie remains same-site.
+- There is no self-service signup in the UI. Accounts are provisioned from the backend.

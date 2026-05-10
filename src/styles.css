@@ -1670,6 +1670,87 @@ table.ctable {
   margin: 0;
 }
 
+.retrieval-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.retrieval-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--surface-border-soft);
+  background: var(--surface-muted-soft);
+  box-shadow: var(--shadow-sm);
+}
+
+.retrieval-card--accent {
+  border-color: var(--surface-accent-info-border-strong);
+  background: linear-gradient(180deg, var(--surface-accent-info), transparent 85%), var(--surface-muted-soft);
+}
+
+.retrieval-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+  font-weight: 600;
+}
+
+.retrieval-main {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text);
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.retrieval-sub {
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.55;
+}
+
+.retrieval-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.retrieval-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--surface-muted-strong);
+  border: 1px solid var(--surface-border-soft);
+  color: var(--text);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.retrieval-chip--query {
+  color: var(--cyan);
+  border-color: var(--surface-accent-info-border);
+  background: var(--surface-accent-info);
+}
+
+.retrieval-note {
+  font-size: 10px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.retrieval-note--mono {
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
 /* ── Raw JSON ───────────────────────────────────────────────────────── */
 .json-toggle {
   width: 100%;
@@ -4044,4 +4125,210 @@ table.ctable {
   .review-candidate-head-actions {
     justify-content: flex-start;
   }
+}
+
+
+/* ── Auth ───────────────────────────────────────────────────────────── */
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background:
+    radial-gradient(circle at top left, var(--page-atmo-top) 0%, transparent 38%),
+    radial-gradient(circle at bottom right, var(--page-atmo-side) 0%, transparent 34%),
+    linear-gradient(180deg, var(--bg1), var(--bg));
+}
+
+.login-panel {
+  position: relative;
+  width: min(460px, 100%);
+  padding: 30px;
+  border-radius: 24px;
+  border: 1px solid var(--surface-border-strong);
+  background: var(--surface-elevated);
+  box-shadow: var(--panel-shadow-lg);
+  overflow: hidden;
+}
+
+.login-panel-glow {
+  position: absolute;
+  inset: -60px auto auto -40px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, var(--cyan-glow) 0%, transparent 72%);
+  pointer-events: none;
+}
+
+.login-eyebrow {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--cyan-dim);
+  border: 1px solid var(--cy-b);
+  color: var(--text2);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-title {
+  position: relative;
+  z-index: 1;
+  margin-top: 18px;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 7vw, 42px);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.login-copy,
+.login-hint {
+  position: relative;
+  z-index: 1;
+  color: var(--text2);
+}
+
+.login-copy {
+  margin-top: 12px;
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.login-form {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.login-field {
+  display: grid;
+  gap: 8px;
+}
+
+.login-label {
+  color: var(--text2);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-input {
+  height: 46px;
+  width: 100%;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--surface-border-strong);
+  background: var(--surface-muted-strong);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms, background 150ms;
+}
+
+.login-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+  background: var(--surface-elevated-alt);
+}
+
+.login-input::placeholder {
+  color: var(--text3);
+}
+
+.login-error {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--rd-b);
+  background: var(--red-dim);
+  color: var(--red);
+  font-size: 12px;
+}
+
+.login-button {
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--cy-b);
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: #041019;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: transform 120ms, filter 120ms, box-shadow 120ms;
+  box-shadow: 0 18px 28px rgba(0, 0, 0, 0.18);
+}
+
+.login-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.login-button:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.login-hint {
+  margin-top: 16px;
+  font-size: 12px;
+}
+
+.topbar-user-pill,
+.topbar-logout {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+}
+
+.topbar-user-pill {
+  gap: 8px;
+  max-width: min(36vw, 320px);
+  padding: 0 12px;
+  border: 1px solid var(--surface-border-strong);
+  background: var(--surface-muted-strong);
+}
+
+.topbar-user-label {
+  color: var(--text3);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.topbar-user-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.topbar-logout {
+  padding: 0 12px;
+  border: 1px solid var(--surface-border-strong);
+  background: var(--surface-muted-strong);
+  color: var(--text2);
+  font-size: 11px;
+  transition: border-color 150ms, background 150ms, color 150ms;
+}
+
+.topbar-logout:hover:not(:disabled) {
+  border-color: var(--rd-b);
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.topbar-logout:disabled {
+  cursor: default;
+  opacity: 0.7;
 }

@@ -58,6 +58,28 @@ const DECISION_OPTIONS: Array<{
   },
 ] as const;
 
+const MASTER_CONSOLIDATION_DECISION_OPTIONS: Array<{
+  value: ReviewDecisionPayload['decision'];
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: 'consolidate_records_to_existing_master',
+    label: 'Consolidate Into Existing Master',
+    hint: 'Merge these overlapping entities into one existing master for this run.',
+  },
+  {
+    value: 'consolidate_records_to_new_master',
+    label: 'Consolidate Into New Master',
+    hint: 'Merge these overlapping entities and publish them as one new master for this run.',
+  },
+  {
+    value: 'keep_record_sets_separate',
+    label: 'Keep Masters Separate',
+    hint: 'Resolve the consolidation signal without merging these entities.',
+  },
+] as const;
+
 const TERMINAL_PUBLISH_STATUSES = new Set([
   'completed',
   'completed_with_issues',
@@ -75,12 +97,22 @@ function formatCaseType(value?: string | null) {
     case 'parent_resolution':
       return 'parent review';
     case 'master_consolidation':
-      return 'duplicate master review';
+      return 'master consolidation review';
     case 'anomaly_review':
       return 'anomaly review';
     default:
       return humanizeToken(value);
   }
+}
+
+function isMasterConsolidationCase(item: ReviewCaseListItem | ReviewCaseDetail | null | undefined) {
+  return item?.case_type === 'master_consolidation';
+}
+
+function getDecisionOptions(item: ReviewCaseListItem | ReviewCaseDetail | null | undefined) {
+  return isMasterConsolidationCase(item)
+    ? MASTER_CONSOLIDATION_DECISION_OPTIONS
+    : DECISION_OPTIONS;
 }
 
 function formatDate(value?: string | null) {
@@ -192,7 +224,7 @@ function buildCaseSummary(
     || (isParentReviewCase(item)
       ? `${item.source_count} supporting record${item.source_count === 1 ? '' : 's'} still need a human parent decision.`
       : item.case_type === 'master_consolidation'
-        ? 'These overlapping entities need a human consolidation decision before publish can continue.'
+        ? 'These overlapping entities were resolved at the row level, but they still look close enough that a human needs to decide whether to consolidate them for this run.'
         : `${item.source_count} unresolved record${item.source_count === 1 ? '' : 's'} still need a human resolution decision.`);
 }
 
@@ -204,7 +236,7 @@ function buildCaseQuestion(
     || (isParentReviewCase(item)
       ? 'Choose the correct parent entity for this label.'
       : item.case_type === 'master_consolidation'
-        ? 'Decide whether these overlapping entities should stay separate or be consolidated.'
+        ? 'Decide whether these overlapping entities should be consolidated for this run or kept separate.'
         : 'Choose the safest outcome for this unresolved record set.');
 }
 
@@ -300,6 +332,7 @@ export function ReviewWorkspace({
 
   const selectedCase = reviewCaseDetail;
   const selectedCaseId = selectedCase?.case_id ?? '';
+  const decisionOptions = getDecisionOptions(selectedCase);
   const [masterSearchInput, setMasterSearchInput] = useState('');
   const [showAllChildGroups, setShowAllChildGroups] = useState(false);
   const [showAllRecordGroups, setShowAllRecordGroups] = useState(false);
@@ -917,14 +950,14 @@ export function ReviewWorkspace({
                             disabled={isDecisionLocked(selectedCase)}
                           >
                             <option value="">Select a decision</option>
-                            {DECISION_OPTIONS.map((option) => (
+                            {decisionOptions.map((option) => (
                               <option key={option.value} value={option.value}>
                                 {option.label}
                               </option>
                             ))}
                           </select>
                           <span className="review-field-hint">
-                            {DECISION_OPTIONS.find((option) => option.value === decision)?.hint
+                            {decisionOptions.find((option) => option.value === decision)?.hint
                               || 'Choose what should happen when this record set is eventually published.'}
                           </span>
                         </label>
@@ -932,10 +965,16 @@ export function ReviewWorkspace({
                         {requiresExistingMasterSelection && (
                           <div className="review-field">
                             <span className="review-field-label">
-                              {isParentReviewCase(selectedCase) ? 'Choose Parent Entity' : 'Choose Existing Entity'}
+                              {isParentReviewCase(selectedCase)
+                                ? 'Choose Parent Entity'
+                                : isMasterConsolidationCase(selectedCase)
+                                  ? 'Choose Winning Master'
+                                  : 'Choose Existing Entity'}
                             </span>
                             <div className="review-field-hint">
-                              Start with the candidate cards above. Search all existing entities only if none of them fit.
+                              {isMasterConsolidationCase(selectedCase)
+                                ? 'Start with the entities under review above. Search all existing masters only if the right winner is not already listed.'
+                                : 'Start with the candidate cards above. Search all existing entities only if none of them fit.'}
                             </div>
                             {hasChildSideCandidate && (
                               <div className="review-inline-note">
@@ -947,7 +986,9 @@ export function ReviewWorkspace({
                               value={masterSearchInput}
                               onChange={(event) => setMasterSearchInput(event.target.value)}
                               disabled={isDecisionLocked(selectedCase)}
-                              placeholder="search existing entities by name or URL"
+                              placeholder={isMasterConsolidationCase(selectedCase)
+                                ? 'search existing masters by name or URL'
+                                : 'search existing entities by name or URL'}
                             />
                             {searchedMastersQuery.isFetching && (
                               <span className="review-field-hint">Searching existing entities…</span>

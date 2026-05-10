@@ -1,12 +1,9 @@
 import { useState } from 'react';
 import type { Message, Thread, UserMessage } from '@openuidev/react-headless';
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
+import { INSIGHTS_API_BASE_URL, fetchWithAuth, requestJson } from './http.ts';
 
 const STORAGE_KEY = 'axial-analysis-ui:analysis-user-key';
-const runtimeEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
-
-const INSIGHTS_API_BASE_URL =
-  runtimeEnv.VITE_INSIGHTS_API_BASE_URL || 'http://localhost:5003/api/v1';
 
 export const ANALYSIS_CHAT_API_URL = `${INSIGHTS_API_BASE_URL}/chat/stream`;
 export const ANALYSIS_THREADS_API_URL = `${INSIGHTS_API_BASE_URL}/chat/threads`;
@@ -51,14 +48,6 @@ export function createAnalysisContextSnapshot(explorer: TraceExplorerState) {
   };
 }
 
-async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init);
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
-  }
-  return response.json() as Promise<T>;
-}
-
 export async function fetchAnalysisThreads(userKey: string, cursor?: string) {
   const url = new URL(ANALYSIS_THREADS_API_URL);
   url.searchParams.set('userKey', userKey);
@@ -96,7 +85,13 @@ export async function updateAnalysisThread(userKey: string, thread: Thread) {
 export async function deleteAnalysisThread(userKey: string, threadId: string) {
   const url = new URL(`${ANALYSIS_THREADS_API_URL}/${encodeURIComponent(threadId)}`);
   url.searchParams.set('userKey', userKey);
-  await fetch(url, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
+  const response = await fetchWithAuth(url, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+  }
 }
 
 export async function sendAnalysisMessage({
@@ -112,7 +107,7 @@ export async function sendAnalysisMessage({
   userKey: string;
   context: ReturnType<typeof createAnalysisContextSnapshot>;
 }) {
-  return fetch(ANALYSIS_CHAT_API_URL, {
+  return fetchWithAuth(ANALYSIS_CHAT_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

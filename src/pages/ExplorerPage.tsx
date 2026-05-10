@@ -59,6 +59,124 @@ function renderAgentSubject(activity: AgentActivityRecord) {
   );
 }
 
+function getStringValues(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
+
+function RetrievalSection({
+  retrievalDebug,
+  retrievalCount,
+}: {
+  retrievalDebug: Record<string, unknown>;
+  retrievalCount: number;
+}) {
+  if (!hasObjectContent(retrievalDebug)) return null;
+
+  const exactNameKeys = getStringValues(retrievalDebug.exact_name_keys);
+  const exactCandidateIds = getStringValues(retrievalDebug.exact_candidate_ids);
+  const partialQueries = getStringValues(retrievalDebug.partial_name_queries);
+  const partialCandidateIds = getStringValues(retrievalDebug.partial_candidate_ids);
+  const finalCandidateIds = getStringValues(retrievalDebug.candidate_ids);
+  const exactUrlKey = typeof retrievalDebug.exact_url_key === 'string' && retrievalDebug.exact_url_key
+    ? retrievalDebug.exact_url_key
+    : null;
+  const partialSearchUsed = retrievalDebug.partial_search_used === true;
+  const partialSearchAvailable = retrievalDebug.partial_search_available !== false;
+
+  const partialSummary = partialSearchUsed
+    ? 'Partial-name rescue ran because exact retrieval found no usable candidates.'
+    : partialSearchAvailable
+      ? 'Partial-name rescue did not need to run for this record.'
+      : 'Partial-name rescue is unavailable in this environment.';
+
+  return (
+    <div className="section">
+      <div className="section-title">
+        <span className="section-title-text">⊛ Candidate Retrieval</span>
+        <span className="section-hint">how the retrieval pool was built before evaluation</span>
+      </div>
+
+      <div className="retrieval-grid">
+        <article className="retrieval-card">
+          <div className="retrieval-label">Exact name lookup</div>
+          <div className="retrieval-main">{exactNameKeys.length} key{exactNameKeys.length === 1 ? '' : 's'}</div>
+          <div className="retrieval-sub">
+            {exactNameKeys.length > 0
+              ? 'Stored exact variation keys checked for this record.'
+              : 'No exact variation keys matched a stored master name surface.'}
+          </div>
+          {exactNameKeys.length > 0 && (
+            <div className="retrieval-chip-row">
+              {exactNameKeys.map((key) => (
+                <span key={key} className="retrieval-chip">{key}</span>
+              ))}
+            </div>
+          )}
+          {exactCandidateIds.length > 0 && (
+            <div className="retrieval-note">Exact-stage hits: {exactCandidateIds.join(', ')}</div>
+          )}
+        </article>
+
+        <article className="retrieval-card">
+          <div className="retrieval-label">Exact URL lookup</div>
+          <div className="retrieval-main">{exactUrlKey ? 'available' : 'none'}</div>
+          <div className="retrieval-sub">
+            {exactUrlKey
+              ? 'An exact standardized URL key was available for retrieval.'
+              : 'No standardized source URL was available for an exact URL lookup.'}
+          </div>
+          {exactUrlKey && <div className="retrieval-note retrieval-note--mono">{exactUrlKey}</div>}
+        </article>
+
+        <article className={`retrieval-card${partialSearchUsed ? ' retrieval-card--accent' : ''}`}>
+          <div className="retrieval-label">Partial-name rescue</div>
+          <div className="retrieval-main">
+            {partialSearchUsed ? 'used' : partialSearchAvailable ? 'not needed' : 'unavailable'}
+          </div>
+          <div className="retrieval-sub">{partialSummary}</div>
+          {partialQueries.length > 0 && (
+            <div className="retrieval-chip-row">
+              {partialQueries.map((query) => (
+                <span key={query} className="retrieval-chip retrieval-chip--query">{query}</span>
+              ))}
+            </div>
+          )}
+          {partialCandidateIds.length > 0 && (
+            <div className="retrieval-note">Partial hits: {partialCandidateIds.join(', ')}</div>
+          )}
+        </article>
+
+        <article className="retrieval-card">
+          <div className="retrieval-label">Final candidate pool</div>
+          <div className="retrieval-main">
+            {retrievalCount} candidate{retrievalCount === 1 ? '' : 's'}
+          </div>
+          <div className="retrieval-sub">
+            {finalCandidateIds.length > 0
+              ? 'Candidates that moved forward into evaluator ranking.'
+              : 'No candidates survived retrieval for this record.'}
+          </div>
+          {finalCandidateIds.length > 0 && (
+            <div className="retrieval-chip-row">
+              {finalCandidateIds.map((candidateId) => (
+                <span key={candidateId} className="retrieval-chip">{candidateId}</span>
+              ))}
+            </div>
+          )}
+        </article>
+      </div>
+
+      <details className="payload-disclosure">
+        <summary>Raw retrieval payload</summary>
+        <div className="json-body json-body--embedded">
+          <JsonHighlight data={retrievalDebug} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function TimelineSection({ events }: { events: ResolutionTimelineEvent[] }) {
   const [open, setOpen] = useState(false);
   if (!events.length) return null;
@@ -563,17 +681,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
 
               <AgentActivitySection activities={detail.agent_activity} />
 
-              {hasObjectContent(retrievalDebug) && (
-                <div className="section">
-                  <div className="section-title">
-                    <span className="section-title-text">⊛ Candidate Retrieval</span>
-                    <span className="section-hint">actual retrieval debug payload</span>
-                  </div>
-                  <div className="json-body json-body--embedded">
-                    <JsonHighlight data={retrievalDebug} />
-                  </div>
-                </div>
-              )}
+              <RetrievalSection retrievalDebug={retrievalDebug} retrievalCount={retrievalCount} />
 
               <div className="section section--source-data">
                 <div className="section-title">

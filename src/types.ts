@@ -3,6 +3,11 @@ export type SourceResolutionStatus =
   | 'created_new_master'
   | 'pending_review';
 
+export type AuthenticatedUser = {
+  id: number;
+  email: string;
+};
+
 export type RunSummary = {
   run_id: string;
   status?: string | null;

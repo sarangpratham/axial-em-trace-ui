@@ -1,18 +1,10 @@
 import type {
   MasterSearchResult,
 } from '../types';
-
-const INSIGHTS_API_BASE_URL =
-  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}).VITE_INSIGHTS_API_BASE_URL
-  || 'http://localhost:5003/api/v1';
+import { INSIGHTS_API_BASE_URL, requestApiJson } from './http.ts';
 
 async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${INSIGHTS_API_BASE_URL}${path}`);
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-  const payload = await response.json();
-  return payload.data as T;
+  return requestApiJson<T>(INSIGHTS_API_BASE_URL, path);
 }
 
 export function searchMasterEntities(params: {
