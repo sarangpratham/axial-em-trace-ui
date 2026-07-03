@@ -10,7 +10,7 @@ export function AppTopbar({
   selectedRunId,
   onRunChange,
 }: {
-  currentView: 'explorer' | 'anomalies' | 'chat' | 'review';
+  currentView: 'explorer' | 'issues' | 'review' | 'cost';
   statusSlot?: ReactNode;
   runIds?: string[];
   selectedRunId?: string;
@@ -20,6 +20,8 @@ export function AppTopbar({
   const { mode, toggleMode } = useTheme();
   const { user, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const runOptions = Array.from(new Set([...(selectedRunId ? [selectedRunId] : []), ...(runIds ?? [])]));
+  const showRunPicker = Boolean(onRunChange);
 
   async function handleLogout() {
     if (isLoggingOut) return;
@@ -47,30 +49,33 @@ export function AppTopbar({
           <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/explorer">
             Explorer
           </NavLink>
-          <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/anomalies">
-            Anomalies
-          </NavLink>
-          <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/chat">
-            Chat
+          <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/issues">
+            Issues
           </NavLink>
           <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/review">
             Review
+          </NavLink>
+          <NavLink className={({ isActive }) => `mode-tab${isActive ? ' mode-tab--active' : ''}`} to="/cost">
+            Cost
           </NavLink>
         </div>
       </div>
 
       <div className="topbar-status">
-        {runIds && runIds.length > 0 && onRunChange && (
+        {showRunPicker && (
           <label className="topbar-run-picker">
             <span className="topbar-run-picker-label">Run</span>
             <select
               className="topbar-run-picker-select"
               value={selectedRunId ?? ''}
-              onChange={(event) => onRunChange(event.target.value)}
+              onChange={(event) => onRunChange?.(event.target.value)}
               aria-label="Select run"
+              disabled={runOptions.length === 0}
             >
-              {!selectedRunId && <option value="">Select run…</option>}
-              {runIds.map((runId) => (
+              {!selectedRunId && (
+                <option value="">{runOptions.length === 0 ? 'Loading runs…' : 'Select run…'}</option>
+              )}
+              {runOptions.map((runId) => (
                 <option key={runId} value={runId}>
                   {runId}
                 </option>

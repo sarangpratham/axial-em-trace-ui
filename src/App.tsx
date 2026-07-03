@@ -8,14 +8,14 @@ import { resolveHomePath } from './lib/authRouting.ts';
 const ExplorerPage = lazy(async () => ({
   default: (await import('./pages/ExplorerPage')).ExplorerPage,
 }));
-const AnalysisPage = lazy(async () => ({
-  default: (await import('./pages/AnalysisPage')).AnalysisPage,
-}));
 const ReviewPage = lazy(async () => ({
   default: (await import('./pages/ReviewPage')).ReviewPage,
 }));
-const AnomaliesPage = lazy(async () => ({
-  default: (await import('./pages/AnomaliesPage')).AnomaliesPage,
+const IssuesPage = lazy(async () => ({
+  default: (await import('./pages/IssuesPage')).IssuesPage,
+}));
+const CostPage = lazy(async () => ({
+  default: (await import('./pages/CostPage')).CostPage,
 }));
 const LoginPage = lazy(async () => ({
   default: (await import('./pages/LoginPage')).LoginPage,
@@ -24,7 +24,7 @@ const NotFoundPage = lazy(async () => ({
   default: (await import('./pages/NotFoundPage')).NotFoundPage,
 }));
 
-type WorkspaceView = 'explorer' | 'anomalies' | 'chat' | 'review';
+type WorkspaceView = 'explorer' | 'issues' | 'review' | 'cost';
 
 function WorkspaceLoading() {
   return (
@@ -55,12 +55,12 @@ function WorkspaceRoute({ view }: { view: WorkspaceView }) {
   switch (view) {
     case 'explorer':
       return <ExplorerPage explorer={explorer} />;
-    case 'anomalies':
-      return <AnomaliesPage explorer={explorer} />;
-    case 'chat':
-      return <AnalysisPage explorer={explorer} />;
+    case 'issues':
+      return <IssuesPage explorer={explorer} />;
     case 'review':
       return <ReviewPage explorer={explorer} />;
+    case 'cost':
+      return <CostPage explorer={explorer} />;
     default:
       return null;
   }
@@ -81,18 +81,10 @@ export default function App() {
           )}
         />
         <Route
-          path="/anomalies"
+          path="/issues"
           element={(
             <ProtectedRoute>
-              <WorkspaceRoute view="anomalies" />
-            </ProtectedRoute>
-          )}
-        />
-        <Route
-          path="/chat"
-          element={(
-            <ProtectedRoute>
-              <WorkspaceRoute view="chat" />
+              <WorkspaceRoute view="issues" />
             </ProtectedRoute>
           )}
         />
@@ -101,6 +93,14 @@ export default function App() {
           element={(
             <ProtectedRoute>
               <WorkspaceRoute view="review" />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/cost"
+          element={(
+            <ProtectedRoute>
+              <WorkspaceRoute view="cost" />
             </ProtectedRoute>
           )}
         />

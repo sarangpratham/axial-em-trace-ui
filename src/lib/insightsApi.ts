@@ -1,4 +1,5 @@
 import type {
+  MasterArtifactDetail,
   MasterSearchResult,
 } from '../types';
 import { INSIGHTS_API_BASE_URL, requestApiJson } from './http.ts';
@@ -24,4 +25,8 @@ export function searchMasterEntities(params: {
   if (params.limit != null) search.set('limit', String(params.limit));
   const suffix = search.size ? `?${search.toString()}` : '';
   return request<MasterSearchResult[]>(`/masters${suffix}`);
+}
+
+export function getMasterEntity(entityId: string) {
+  return request<MasterArtifactDetail>(`/masters/${encodeURIComponent(entityId)}`);
 }

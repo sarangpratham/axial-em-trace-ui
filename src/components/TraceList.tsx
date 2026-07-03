@@ -2,7 +2,7 @@ import { useDeferredValue } from 'react';
 import type { TraceSummary } from '../types';
 import { StatusBadge } from './StatusBadge';
 
-function AnomalyBadge({ count, severity }: { count: number; severity?: string }) {
+function IssueBadge({ count, severity }: { count: number; severity?: string }) {
   if (!count) return null;
   return (
     <span className={`badge badge--anomaly badge--severity-${severity || 'medium'}`}>
@@ -11,18 +11,18 @@ function AnomalyBadge({ count, severity }: { count: number; severity?: string })
   );
 }
 
-function formatAnomalyType(value: string) {
+function formatIssueType(value: string) {
   return value.split('_').join(' ');
 }
 
 type Props = {
   traces: TraceSummary[];
   selectedTraceId?: string;
-  activeAnomalyType?: string;
+  activeIssueType?: string;
   onSelect: (trace: TraceSummary) => void;
 };
 
-export function TraceList({ traces, selectedTraceId, activeAnomalyType, onSelect }: Props) {
+export function TraceList({ traces, selectedTraceId, activeIssueType, onSelect }: Props) {
   const deferredTraces = useDeferredValue(traces);
 
   if (!deferredTraces.length) {
@@ -58,11 +58,11 @@ export function TraceList({ traces, selectedTraceId, activeAnomalyType, onSelect
                 {trace.candidate_count} candidates · {trace.viable_candidate_count} viable
               </span>
               {trace.decision_source && <StatusBadge label={trace.decision_source} />}
-              {trace.has_anomalies && (
-                <AnomalyBadge count={trace.anomaly_count || 0} severity={trace.anomaly_severity || undefined} />
+              {trace.has_issues && (
+                <IssueBadge count={trace.issue_count || 0} severity={trace.issue_severity || undefined} />
               )}
-              {activeAnomalyType && trace.anomaly_types?.includes(activeAnomalyType) && (
-                <span className="trace-anomaly-type-pill">{formatAnomalyType(activeAnomalyType)}</span>
+              {activeIssueType && trace.issue_types?.includes(activeIssueType) && (
+                <span className="trace-anomaly-type-pill">{formatIssueType(activeIssueType)}</span>
               )}
             </div>
           </button>

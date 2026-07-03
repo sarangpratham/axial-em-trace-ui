@@ -10,13 +10,13 @@ import type { AgentActivityRecord, ResolutionTimelineEvent } from '../types';
 import { humanizeToken, sourceResolutionLabel } from '../lib/sourceResolution';
 
 const MODULE_OPTIONS = ['news', 'linkedin', 'portfolio'];
-const ANOMALY_PRESENCE_OPTIONS = [
+const ISSUE_PRESENCE_OPTIONS = [
   { value: 'all', label: 'All' },
   { value: 'with', label: 'With' },
   { value: 'clean', label: 'Clean' },
 ] as const;
 
-function formatAnomalyLabel(value: string) {
+function formatIssueLabel(value: string) {
   return value.split('_').join(' ');
 }
 
@@ -279,11 +279,11 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
     statusFilter,
     decisionSourceFilter,
     summary,
-    anomalyPresenceFilter,
-    anomalyTypeFilter,
-    availableAnomalyTypes,
-    setAnomalyPresenceFilter,
-    setAnomalyTypeFilter,
+    issuePresenceFilter,
+    issueTypeFilter,
+    availableIssueTypes,
+    setIssuePresenceFilter,
+    setIssueTypeFilter,
     publishSummary,
   } = explorer;
 
@@ -318,7 +318,8 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
             <option value="">all</option>
             <option value="assigned_existing_master">assigned_existing_master</option>
             <option value="created_new_master">created_new_master</option>
-            <option value="pending_review">pending_review</option>
+            <option value="needs_review_multi_master">needs_review_multi_master</option>
+            <option value="unresolved">unresolved</option>
           </select>
 
           <span className="topbar-filter-label">Decision source</span>
@@ -334,16 +335,16 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
 
       <div className="explorer-anomaly-rail">
         <div className="explorer-anomaly-group">
-          <span className="topbar-filter-label">Anomalies</span>
-          <div className="anomaly-segmented-control" role="group" aria-label="Anomaly presence filter">
-            {ANOMALY_PRESENCE_OPTIONS.map((option) => (
+          <span className="topbar-filter-label">Issues</span>
+          <div className="anomaly-segmented-control" role="group" aria-label="Issue presence filter">
+            {ISSUE_PRESENCE_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                className={`anomaly-segment${anomalyPresenceFilter === option.value ? ' anomaly-segment--active' : ''}${
+                className={`anomaly-segment${issuePresenceFilter === option.value ? ' anomaly-segment--active' : ''}${
                   option.value === 'with' ? ' anomaly-segment--warn' : option.value === 'clean' ? ' anomaly-segment--clean' : ''
                 }`}
-                onClick={() => setAnomalyPresenceFilter(option.value)}
+                onClick={() => setIssuePresenceFilter(option.value)}
               >
                 {option.label}
               </button>
@@ -355,16 +356,16 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
           <span className="topbar-filter-label">Type</span>
           <select
             className="topbar-select explorer-anomaly-select"
-            value={anomalyTypeFilter}
-            onChange={(event) => setAnomalyTypeFilter(event.target.value)}
-            disabled={anomalyPresenceFilter === 'clean' || availableAnomalyTypes.length === 0}
+            value={issueTypeFilter}
+            onChange={(event) => setIssueTypeFilter(event.target.value)}
+            disabled={issuePresenceFilter === 'clean' || availableIssueTypes.length === 0}
           >
             <option value="">
-              {availableAnomalyTypes.length > 0 ? 'all anomaly types' : 'no anomaly types'}
+              {availableIssueTypes.length > 0 ? 'all issue types' : 'no issue types'}
             </option>
-            {availableAnomalyTypes.map(([type, count]) => (
+            {availableIssueTypes.map(([type, count]) => (
               <option key={type} value={type}>
-                {formatAnomalyLabel(type)} ({count})
+                {formatIssueLabel(type)} ({count})
               </option>
             ))}
           </select>
@@ -396,13 +397,13 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
                 <span className="num">{publishSummary.open_review_case_count}</span> open review
               </div>
               <div className="stat-pill stat-pill--review">
-                <span className="num">{publishSummary.reviewed_unpublished_case_count}</span> ready
+                <span className="num">{publishSummary.decided_review_case_count}</span> ready
               </div>
               <div className="stat-pill stat-pill--blocked">
                 <span className="num">{publishSummary.publish_blocked_case_count}</span> blocked
               </div>
               <div className="stat-pill stat-pill--failed">
-                <span className="num">{publishSummary.publish_failed_case_count}</span> failed
+                <span className="num">{publishSummary.failed_publish_case_count}</span> failed
               </div>
               <div className="stat-pill stat-pill--published">
                 <span className="num">{publishSummary.published_case_count}</span> published
@@ -417,15 +418,15 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
               )}
             </>
           )}
-          {summary.anomaly_total && summary.anomaly_total > 0 && (
+          {summary.issue_count && summary.issue_count > 0 && (
             <>
               <div className="stat-divider" />
               <div className="stat-pill stat-pill--anomaly">
                 <span className="stat-dot" style={{ background: 'var(--red)' }} />
-                <span className="num">{summary.anomaly_total}</span> anomaly signals
+                <span className="num">{summary.issue_count}</span> issue signals
               </div>
-              {summary.anomaly_by_severity &&
-                Object.entries(summary.anomaly_by_severity).map(([severity, count]) => (
+              {summary.issue_by_severity &&
+                Object.entries(summary.issue_by_severity).map(([severity, count]) => (
                   <div key={severity} className={`stat-pill stat-pill--severity-${severity}`}>
                     <span className="num">{count}</span> {severity}
                   </div>
@@ -464,7 +465,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
   const changedFields = evaluationContext?.changed_fields ?? [];
   const changeSources = evaluationContext?.change_sources ?? {};
   const rawSource = detail?.raw_source ?? detail?.source ?? {};
-  const currentSource = detail?.current_source ?? {};
+  const currentSource = detail?.current_source ?? detail?.source ?? {};
   const hasSourceDiff = changedFields.length > 0;
   const retrievalCount = (() => {
     const explicitCount = typeof retrievalDebug.candidate_count === 'number'
@@ -506,7 +507,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
             <TraceList
               traces={traces}
               selectedTraceId={selectedTraceKey}
-              activeAnomalyType={explorer.anomalyTypeFilter}
+              activeIssueType={explorer.issueTypeFilter}
               onSelect={selectTrace}
             />
           )}
@@ -717,7 +718,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
                 {jsonOpen && (
                   <div className="source-json-grid">
                     <div className="source-json-card">
-                      <div className="source-json-title">Original Raw Source JSON</div>
+                      <div className="source-json-title">Original Source Snapshot JSON</div>
                       <div className="json-body json-body--embedded">
                         <JsonHighlight data={rawSource} />
                       </div>

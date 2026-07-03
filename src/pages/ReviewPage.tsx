@@ -55,8 +55,8 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
       return;
     }
     const savedDecision =
-      typeof reviewCaseDetail.decision_payload?.decision === 'string'
-        ? String(reviewCaseDetail.decision_payload.decision)
+      typeof reviewCaseDetail.decision_payload?.decision_type === 'string'
+        ? String(reviewCaseDetail.decision_payload.decision_type)
         : '';
     const savedTarget =
       typeof reviewCaseDetail.decision_payload?.target_entity_id === 'string'

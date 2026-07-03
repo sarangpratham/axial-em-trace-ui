@@ -8,23 +8,6 @@ type Props = {
   evaluationContext?: SourceEvaluationContext;
 };
 
-function scoreForCandidate(cand: CandidateEvaluation, idx: number, total: number): number {
-  if (cand.final_candidate_status === 'selected') return 0.96;
-  if (cand.final_candidate_status === 'pending_review') return 0.64;
-  if (cand.final_candidate_status === 'viable_not_selected') return 0.56;
-  if (cand.evaluation_status === 'agent_required') return 0.42;
-  if (cand.evaluation_status === 'agent_insufficient') return 0.36;
-  if (cand.final_candidate_status === 'suppressed') return 0.22;
-  return Math.max(0.08, 0.24 - idx * (1 / Math.max(total, 1)));
-}
-
-function scoreColor(score: number): string {
-  if (score > 0.8) return 'var(--green)';
-  if (score > 0.55) return 'var(--cyan)';
-  if (score > 0.35) return 'var(--amber)';
-  return 'var(--red)';
-}
-
 type EvidenceRowProps = { label: string; value: string | null | undefined; url?: boolean };
 function EvidenceRow({ label, value, url }: EvidenceRowProps) {
   return (
@@ -41,9 +24,32 @@ function candidateSelectionKey(candidate: CandidateEvaluation, index: number) {
   return `${candidate.candidate_entity_id}:${candidate.match_phase || 'candidate'}:${index}`;
 }
 
+function candidateOutcomeRank(candidate: CandidateEvaluation) {
+  const status = (candidate.final_candidate_status || candidate.evaluation_status || '').toLowerCase();
+  if (status === 'selected') return 0;
+  if (status === 'deterministic_accept' || status === 'agent_accept') return 1;
+  if (status === 'agent_required' || status === 'agent_insufficient' || status === 'agent_prep_failed') return 2;
+  if (status === 'suppressed') return 3;
+  return 4;
+}
+
+function isAcceptedCandidate(candidate: CandidateEvaluation) {
+  return candidateOutcomeRank(candidate) <= 1;
+}
+
 export function CandidateInspector({ candidates, evaluationContext }: Props) {
+  const orderedCandidates = useMemo(
+    () =>
+      [...candidates].sort((left, right) =>
+        candidateOutcomeRank(left) - candidateOutcomeRank(right)
+        || (left.candidate_entity_name || left.candidate_entity_id).localeCompare(
+          right.candidate_entity_name || right.candidate_entity_id,
+        ),
+      ),
+    [candidates],
+  );
   const [selectedKey, setSelectedKey] = useState<string>(
-    candidates[0] ? candidateSelectionKey(candidates[0], 0) : '',
+    orderedCandidates[0] ? candidateSelectionKey(orderedCandidates[0], 0) : '',
   );
   const [visibleCount, setVisibleCount] = useState(CHUNK_SIZE);
   const tableWrapRef = useRef<HTMLDivElement>(null);
@@ -59,47 +65,36 @@ export function CandidateInspector({ candidates, evaluationContext }: Props) {
     updateTableHeight();
     window.addEventListener('resize', updateTableHeight);
     return () => window.removeEventListener('resize', updateTableHeight);
-  }, [candidates.length]);
+  }, [orderedCandidates.length]);
 
-  const scores = useMemo(
-    () =>
-      Object.fromEntries(
-        candidates.map((candidate, index) => [
-          candidateSelectionKey(candidate, index),
-          scoreForCandidate(candidate, index, candidates.length),
-        ]),
-      ),
-    [candidates],
-  );
-
-  const displayedCandidates = candidates.slice(0, visibleCount);
-  const hasMore = visibleCount < candidates.length;
+  const displayedCandidates = orderedCandidates.slice(0, visibleCount);
+  const hasMore = visibleCount < orderedCandidates.length;
 
   useEffect(() => {
-    setSelectedKey(candidates[0] ? candidateSelectionKey(candidates[0], 0) : '');
+    setSelectedKey(orderedCandidates[0] ? candidateSelectionKey(orderedCandidates[0], 0) : '');
     setVisibleCount(CHUNK_SIZE);
-  }, [candidates]);
+  }, [orderedCandidates]);
 
   useEffect(() => {
-    if (candidates.length > CHUNK_SIZE && visibleCount < CHUNK_SIZE) {
+    if (orderedCandidates.length > CHUNK_SIZE && visibleCount < CHUNK_SIZE) {
       const timer = setInterval(() => {
         setVisibleCount((prev) => {
-          if (prev >= candidates.length) {
+          if (prev >= orderedCandidates.length) {
             clearInterval(timer);
             return prev;
           }
-          return Math.min(prev + CHUNK_SIZE, candidates.length);
+          return Math.min(prev + CHUNK_SIZE, orderedCandidates.length);
         });
       }, 100);
       return () => clearInterval(timer);
     }
-  }, [candidates.length]);
+  }, [orderedCandidates.length, visibleCount]);
 
   const selected = useMemo(
     () =>
-      candidates.find((candidate, index) => candidateSelectionKey(candidate, index) === selectedKey)
-      ?? candidates[0],
-    [candidates, selectedKey],
+      orderedCandidates.find((candidate, index) => candidateSelectionKey(candidate, index) === selectedKey)
+      ?? orderedCandidates[0],
+    [orderedCandidates, selectedKey],
   );
 
   if (!candidates.length) {
@@ -109,8 +104,6 @@ export function CandidateInspector({ candidates, evaluationContext }: Props) {
       </div>
     );
   }
-
-  const score = selected ? scores[selectedKey] ?? 0 : 0;
 
   return (
     <div className="candidate-wrap">
@@ -123,13 +116,13 @@ export function CandidateInspector({ candidates, evaluationContext }: Props) {
               <th>Phase</th>
               <th>Rule</th>
               <th>Route</th>
-              <th>Disposition</th>
+              <th>Outcome</th>
             </tr>
           </thead>
           <tbody>
             {displayedCandidates.map((c, i) => {
               const selectionKey = candidateSelectionKey(c, i);
-              const rankCls = i === 0 ? 'rank-badge--winner' : i < 3 ? 'rank-badge--top' : '';
+              const rankCls = isAcceptedCandidate(c) ? 'rank-badge--winner' : '';
               return (
                 <tr
                   key={selectionKey}
@@ -171,7 +164,7 @@ export function CandidateInspector({ candidates, evaluationContext }: Props) {
         {hasMore && (
           <div className="candidate-load-more-wrap">
             <button
-              onClick={() => setVisibleCount(prev => Math.min(prev + CHUNK_SIZE, candidates.length))}
+              onClick={() => setVisibleCount(prev => Math.min(prev + CHUNK_SIZE, orderedCandidates.length))}
               className="candidate-load-more"
             >
               Load more…
@@ -186,16 +179,12 @@ export function CandidateInspector({ candidates, evaluationContext }: Props) {
             <div className="evidence-pane-name" title={selected.candidate_entity_name || selected.candidate_entity_id}>
               {selected.candidate_entity_name || selected.candidate_entity_id}
             </div>
-            <span className="evidence-score" style={{ color: scoreColor(score) }}>
-              {score.toFixed(2)}
-            </span>
           </div>
           <div className="evidence-rows">
             <EvidenceRow label="Source URL at Eval" value={evaluationContext?.source_url_at_evaluation} url />
             <EvidenceRow label="Current Source URL" value={evaluationContext?.current_source_url} url />
             <EvidenceRow label="Candidate URL" value={selected.candidate_entity_url} url />
             <EvidenceRow label="Candidate ID" value={selected.candidate_entity_id} />
-            <EvidenceRow label="Evaluation Score" value={score.toFixed(2)} />
             <EvidenceRow label="Phase" value={selected.match_phase} />
             <EvidenceRow label="Match Rule" value={humanizeToken(selected.match_type)} />
             <EvidenceRow label="Decision Source" value={humanizeToken(selected.decision_source)} />
@@ -205,7 +194,7 @@ export function CandidateInspector({ candidates, evaluationContext }: Props) {
             <EvidenceRow label="Evaluation Status" value={humanizeToken(selected.evaluation_status)} />
             <EvidenceRow label="Agent Decision" value={humanizeToken(selected.agent_decision)} />
             <EvidenceRow label="Agent Confidence" value={selected.agent_confidence} />
-            <EvidenceRow label="Final Disposition" value={candidateDispositionLabel(selected.final_candidate_status)} />
+            <EvidenceRow label="Final Outcome" value={candidateDispositionLabel(selected.final_candidate_status)} />
             <EvidenceRow label="Suppression Reason" value={humanizeToken(selected.suppression_reason)} />
             <EvidenceRow label="Name Match Type" value={humanizeToken(selected.name_match_type)} />
             <EvidenceRow label="URL Decision" value={humanizeToken(selected.url_decision)} />

@@ -13,12 +13,6 @@ export default defineConfig({
           if (id.includes('reactflow')) {
             return 'flow-vendor';
           }
-          if (id.includes('@openuidev/')) {
-            return 'chat-vendor';
-          }
-          if (id.includes('react-markdown') || id.includes('remark-gfm')) {
-            return 'markdown-vendor';
-          }
           if (
             id.includes('react-router')
             || id.includes('@tanstack/react-query')

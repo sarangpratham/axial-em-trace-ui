@@ -3,8 +3,9 @@
 A run inspector for entity matching with three workspaces:
 
 - `Explorer` for the sequential source-resolution flow
-- `Chat` for the AI-assisted postmortem workspace
+- `Issues` for graph-native diagnostics and review links
 - `Review` for human review and publish decisions
+- `Cost` for run-scoped LLM/web-search spend and audit inspection
 
 ## Setup
 
@@ -21,13 +22,15 @@ Create a local `.env` file with:
 VITE_INSIGHTS_API_BASE_URL=http://localhost:5003/api/v1
 ```
 
-- `VITE_INSIGHTS_API_BASE_URL` is used by Explorer, Chat, and Review.
+- `VITE_INSIGHTS_API_BASE_URL` is used by Explorer, Issues, and Review.
+- `VITE_REVIEW_API_BASE_URL` can point Review to a separate review-service origin when needed.
 
 ## Routes
 
 - `/explorer` is the primary source-resolution workspace
-- `/chat` is the analysis workspace
+- `/issues` is the diagnostics workspace
 - `/review` is the human review workspace
+- `/cost` is the run-scoped cost and provider telemetry workspace
 - unknown routes render a not-found page
 
 ## Build

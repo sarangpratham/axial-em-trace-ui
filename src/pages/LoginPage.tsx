@@ -61,8 +61,7 @@ export function LoginPage() {
         <div className="login-eyebrow">Console Access</div>
         <h1 className="login-title">Decision Tracer</h1>
         <p className="login-copy">
-          Sign in with the credentials provisioned for you to inspect Explorer, Chat, Review,
-          and Anomalies.
+          Sign in with the credentials provisioned for you to inspect Explorer, Issues, and Review.
         </p>
 
         <form className="login-form" onSubmit={handleSubmit}>

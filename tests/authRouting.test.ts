@@ -10,6 +10,7 @@ test('home routing follows auth state', () => {
 
 test('post-login routing keeps only safe internal destinations', () => {
   assert.equal(resolvePostLoginPath('/review?case=1'), '/review?case=1');
+  assert.equal(resolvePostLoginPath('/cost?run_id=run-1'), '/cost?run_id=run-1');
   assert.equal(resolvePostLoginPath('/login'), '/explorer');
   assert.equal(resolvePostLoginPath('https://evil.example'), '/explorer');
   assert.equal(resolvePostLoginPath('//evil.example'), '/explorer');

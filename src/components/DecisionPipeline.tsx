@@ -7,7 +7,7 @@ import {
   isPendingReview,
   sourceResolutionLabel,
 } from '../lib/sourceResolution';
-import { AnomalyList } from './AnomalyList';
+import { IssueList } from './IssueList';
 
 type Props = {
   detail: TraceDetail;
@@ -191,14 +191,14 @@ export function DecisionPipeline({ detail }: Props) {
       ),
     },
     {
-      label: 'Anomalies / Follow-Up',
-      name: `${detail.anomaly_count || 0} signal${detail.anomaly_count === 1 ? '' : 's'}`,
-      detail: detail.anomaly_count ? 'Operational follow-up may be required' : 'No anomaly signals recorded',
-      status: detail.anomaly_count ? 'warn' : 'ok',
+      label: 'Issues / Follow-Up',
+      name: `${detail.issue_count || 0} signal${detail.issue_count === 1 ? '' : 's'}`,
+      detail: detail.issue_count ? 'Operational follow-up may be required' : 'No issue signals recorded',
+      status: detail.issue_count ? 'warn' : 'ok',
       colorVar: 'var(--red)',
-      cardClass: detail.anomaly_count ? 'stage-card--anomaly' : '',
+      cardClass: detail.issue_count ? 'stage-card--anomaly' : '',
       drawerContent: (
-        <AnomalyList anomalies={detail.anomalies || []} />
+        <IssueList issues={detail.issues || []} />
       ),
     },
   ];

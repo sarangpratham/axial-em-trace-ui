@@ -3,7 +3,8 @@ import type { SourceResolutionStatus } from '../types';
 const SOURCE_STATUSES: Record<string, SourceResolutionStatus> = {
   assigned_existing_master: 'assigned_existing_master',
   created_new_master: 'created_new_master',
-  pending_review: 'pending_review',
+  needs_review_multi_master: 'needs_review_multi_master',
+  unresolved: 'unresolved',
 };
 
 export function normalizeSourceResolutionStatus(
@@ -29,7 +30,8 @@ export function isCreatedNewMaster(
 export function isPendingReview(
   value: string | null | undefined,
 ): boolean {
-  return normalizeSourceResolutionStatus(value) === 'pending_review';
+  const status = normalizeSourceResolutionStatus(value);
+  return status === 'needs_review_multi_master' || status === 'unresolved';
 }
 
 export function sourceResolutionLabel(
@@ -40,8 +42,10 @@ export function sourceResolutionLabel(
       return 'assigned existing master';
     case 'created_new_master':
       return 'created new master';
-    case 'pending_review':
-      return 'pending review';
+    case 'needs_review_multi_master':
+      return 'needs review: multiple masters';
+    case 'unresolved':
+      return 'unresolved';
     default:
       return humanizeToken(value);
   }
@@ -64,6 +68,18 @@ export function candidateDispositionLabel(
   switch ((value || '').trim().toLowerCase()) {
     case 'selected':
       return 'selected';
+    case 'deterministic_accept':
+      return 'accepted by rules';
+    case 'deterministic_reject':
+      return 'rejected by rules';
+    case 'agent_accept':
+      return 'accepted by agent';
+    case 'agent_reject':
+      return 'rejected by agent';
+    case 'agent_insufficient':
+      return 'needs review';
+    case 'agent_prep_failed':
+      return 'review: prep failed';
     case 'pending_review':
       return 'pending review';
     case 'viable_not_selected':

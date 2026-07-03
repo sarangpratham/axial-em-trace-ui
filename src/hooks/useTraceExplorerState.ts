@@ -22,8 +22,8 @@ const SESSION_KEYS = {
   moduleFilter: 'decision-tracer:module-filter',
   statusFilter: 'decision-tracer:resolution-status-filter',
   decisionSourceFilter: 'decision-tracer:decision-source-filter',
-  anomalyPresence: 'decision-tracer:anomaly-presence',
-  anomalyType: 'decision-tracer:anomaly-type',
+  issuePresence: 'decision-tracer:issue-presence',
+  issueType: 'decision-tracer:issue-type',
   selectedModule: 'decision-tracer:selected-module',
   selectedUniqueId: 'decision-tracer:selected-unique-id',
   reviewTab: 'decision-tracer:review-tab',
@@ -85,19 +85,19 @@ export function useTraceExplorerState() {
     SESSION_KEYS.decisionSourceFilter,
     params.get('decision_source') ?? '',
   );
-  const [anomalyPresenceFilter, setAnomalyPresenceFilterState] = useSessionStringState(
-    SESSION_KEYS.anomalyPresence,
-    params.get('anomaly_type')
+  const [issuePresenceFilter, setIssuePresenceFilterState] = useSessionStringState(
+    SESSION_KEYS.issuePresence,
+    params.get('issue_type')
       ? 'with'
-      : params.get('has_anomalies') === 'true'
+      : params.get('has_issues') === 'true'
         ? 'with'
-        : params.get('has_anomalies') === 'false'
+        : params.get('has_issues') === 'false'
           ? 'clean'
           : 'all',
   );
-  const [anomalyTypeFilter, setAnomalyTypeFilterState] = useSessionStringState(
-    SESSION_KEYS.anomalyType,
-    params.get('anomaly_type') ?? '',
+  const [issueTypeFilter, setIssueTypeFilterState] = useSessionStringState(
+    SESSION_KEYS.issueType,
+    params.get('issue_type') ?? '',
   );
   const [selectedModule, setSelectedModule] = useSessionStringState(
     SESSION_KEYS.selectedModule,
@@ -159,8 +159,8 @@ export function useTraceExplorerState() {
       statusFilter,
       decisionSourceFilter,
       deferredSearch,
-      anomalyPresenceFilter,
-      anomalyTypeFilter,
+      issuePresenceFilter,
+      issueTypeFilter,
     ],
     queryFn: () =>
       getTraces({
@@ -169,34 +169,34 @@ export function useTraceExplorerState() {
         resolutionStatus: statusFilter || undefined,
         decisionSource: decisionSourceFilter || undefined,
         query: deferredSearch || undefined,
-        hasAnomalies:
-          anomalyPresenceFilter === 'with'
+        hasIssues:
+          issuePresenceFilter === 'with'
             ? true
-            : anomalyPresenceFilter === 'clean'
+            : issuePresenceFilter === 'clean'
               ? false
               : undefined,
-        anomalyType: anomalyTypeFilter || undefined,
+        issueType: issueTypeFilter || undefined,
       }),
     enabled: Boolean(selectedRunId),
     staleTime: 20_000,
     gcTime: 5 * 60_000,
   });
 
-  const availableAnomalyTypes = useMemo(() => {
-    const entries = Object.entries(summaryQuery.data?.anomaly_by_type ?? {});
+  const availableIssueTypes = useMemo(() => {
+    const entries = Object.entries(summaryQuery.data?.issue_by_type ?? {});
     return entries.sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
-  }, [summaryQuery.data?.anomaly_by_type]);
+  }, [summaryQuery.data?.issue_by_type]);
 
   useEffect(() => {
-    if (!anomalyTypeFilter) return;
-    if (availableAnomalyTypes.some(([type]) => type === anomalyTypeFilter)) return;
-    setAnomalyTypeFilterState('');
-    setAnomalyPresenceFilterState('all');
+    if (!issueTypeFilter) return;
+    if (availableIssueTypes.some(([type]) => type === issueTypeFilter)) return;
+    setIssueTypeFilterState('');
+    setIssuePresenceFilterState('all');
   }, [
-    anomalyTypeFilter,
-    availableAnomalyTypes,
-    setAnomalyPresenceFilterState,
-    setAnomalyTypeFilterState,
+    issueTypeFilter,
+    availableIssueTypes,
+    setIssuePresenceFilterState,
+    setIssueTypeFilterState,
   ]);
 
   useEffect(() => {
@@ -254,11 +254,11 @@ export function useTraceExplorerState() {
   const reviewFilters = useMemo(() => {
     switch (reviewTab) {
       case 'ready':
-        return { reviewStatus: 'reviewed', publishStatus: 'ready' };
+        return { reviewStatus: 'decided', publishStatus: 'pending' };
       case 'blocked':
         return { publishStatus: 'blocked' };
       case 'failed':
-        return { publishStatus: 'publish_failed' };
+        return { publishStatus: 'failed' };
       case 'published':
         return { publishStatus: 'published' };
       case 'all':
@@ -354,15 +354,15 @@ export function useTraceExplorerState() {
     setSearchInputState(value);
   };
 
-  const setAnomalyPresenceFilter = (value: 'all' | 'with' | 'clean') => {
-    setAnomalyPresenceFilterState(value);
-    if (value === 'clean') setAnomalyTypeFilterState('');
+  const setIssuePresenceFilter = (value: 'all' | 'with' | 'clean') => {
+    setIssuePresenceFilterState(value);
+    if (value === 'clean') setIssueTypeFilterState('');
   };
 
-  const setAnomalyTypeFilter = (value: string) => {
-    setAnomalyTypeFilterState(value);
+  const setIssueTypeFilter = (value: string) => {
+    setIssueTypeFilterState(value);
     if (value) {
-      setAnomalyPresenceFilterState('with');
+      setIssuePresenceFilterState('with');
     }
   };
 
@@ -398,9 +398,9 @@ export function useTraceExplorerState() {
     moduleFilter,
     statusFilter,
     decisionSourceFilter,
-    anomalyPresenceFilter,
-    anomalyTypeFilter,
-    availableAnomalyTypes,
+    issuePresenceFilter,
+    issueTypeFilter,
+    availableIssueTypes,
     selectedModule,
     selectedUniqueId,
     summaryQuery,
@@ -425,8 +425,8 @@ export function useTraceExplorerState() {
     isNew,
     selectedTraceKey,
     updateParam,
-    setAnomalyPresenceFilter,
-    setAnomalyTypeFilter,
+    setIssuePresenceFilter,
+    setIssueTypeFilter,
     setReviewTab,
     selectReviewCase,
     selectTrace,

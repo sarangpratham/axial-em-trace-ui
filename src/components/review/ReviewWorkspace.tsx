@@ -5,21 +5,25 @@ import { useQuery } from '@tanstack/react-query';
 import { JsonHighlight } from '../JsonHighlight';
 import { StatusBadge } from '../StatusBadge';
 import type { TraceExplorerState } from '../../hooks/useTraceExplorerState';
-import { searchMasterEntities } from '../../lib/insightsApi';
+import { getMasterEntity, searchMasterEntities } from '../../lib/insightsApi';
+import { getTraceDetail } from '../../lib/api';
 import { humanizeToken } from '../../lib/sourceResolution';
 import type {
+  CandidateEvaluation,
   MasterSearchResult,
+  ReviewCandidateSummary,
   ReviewCaseDetail,
   ReviewCaseListItem,
   ReviewDecisionPayload,
   ReviewEventView,
   ReviewPublishBatch,
   ReviewPublishResponse,
+  TraceDetail,
 } from '../../types';
 
 const REVIEW_TABS = [
   { key: 'needs_review', label: 'Needs Review' },
-  { key: 'ready', label: 'Reviewed / Ready' },
+  { key: 'ready', label: 'Decided / Pending Publish' },
   { key: 'blocked', label: 'Publish Blocked' },
   { key: 'failed', label: 'Publish Failed' },
   { key: 'published', label: 'Published' },
@@ -27,56 +31,19 @@ const REVIEW_TABS = [
 ] as const;
 
 const DECISION_OPTIONS: Array<{
-  value: ReviewDecisionPayload['decision'];
+  value: ReviewDecisionPayload['decision_type'];
   label: string;
   hint: string;
 }> = [
   {
-    value: 'assign_existing_master',
+    value: 'assign_existing_entity',
     label: 'Assign Existing Master',
     hint: 'Resolve these records to one existing entity.',
   },
   {
-    value: 'create_new_master',
+    value: 'create_new_entity',
     label: 'Create New Master',
     hint: 'Resolve these records as a brand-new entity during publish.',
-  },
-  {
-    value: 'consolidate_records_to_existing_master',
-    label: 'Consolidate Records + Existing Master',
-    hint: 'Consolidate this record set and bind it to one existing entity.',
-  },
-  {
-    value: 'consolidate_records_to_new_master',
-    label: 'Consolidate Records + New Master',
-    hint: 'Consolidate this record set, then publish it as a new entity.',
-  },
-  {
-    value: 'keep_record_sets_separate',
-    label: 'Keep Record Sets Separate',
-    hint: 'Preserve separate record sets and let publish keep them independent.',
-  },
-] as const;
-
-const MASTER_CONSOLIDATION_DECISION_OPTIONS: Array<{
-  value: ReviewDecisionPayload['decision'];
-  label: string;
-  hint: string;
-}> = [
-  {
-    value: 'consolidate_records_to_existing_master',
-    label: 'Consolidate Into Existing Master',
-    hint: 'Merge these overlapping entities into one existing master for this run.',
-  },
-  {
-    value: 'consolidate_records_to_new_master',
-    label: 'Consolidate Into New Master',
-    hint: 'Merge these overlapping entities and publish them as one new master for this run.',
-  },
-  {
-    value: 'keep_record_sets_separate',
-    label: 'Keep Masters Separate',
-    hint: 'Resolve the consolidation signal without merging these entities.',
   },
 ] as const;
 
@@ -98,21 +65,11 @@ function formatCaseType(value?: string | null) {
       return 'parent review';
     case 'master_consolidation':
       return 'master consolidation review';
-    case 'anomaly_review':
-      return 'anomaly review';
+    case 'issue_review':
+      return 'issue review';
     default:
       return humanizeToken(value);
   }
-}
-
-function isMasterConsolidationCase(item: ReviewCaseListItem | ReviewCaseDetail | null | undefined) {
-  return item?.case_type === 'master_consolidation';
-}
-
-function getDecisionOptions(item: ReviewCaseListItem | ReviewCaseDetail | null | undefined) {
-  return isMasterConsolidationCase(item)
-    ? MASTER_CONSOLIDATION_DECISION_OPTIONS
-    : DECISION_OPTIONS;
 }
 
 function formatDate(value?: string | null) {
@@ -122,17 +79,32 @@ function formatDate(value?: string | null) {
   return date.toLocaleString();
 }
 
+function readCaseText(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function looksLikeIdentifier(value: string | null) {
+  if (!value) return false;
+  const trimmed = value.trim();
+  return trimmed.includes('::') || (/^[A-Za-z0-9_-]+$/.test(trimmed) && /\d/.test(trimmed));
+}
+
+function readEntityLabel(value: unknown) {
+  const text = readCaseText(value);
+  if (!text || looksLikeIdentifier(text)) return null;
+  return text;
+}
+
 function requiresTargetEntityId(decision: string) {
-  return (
-    decision === 'assign_existing_master'
-    || decision === 'consolidate_records_to_existing_master'
-  );
+  return decision === 'assign_existing_entity';
 }
 
 function canSelectForPublish(item: ReviewCaseListItem) {
   return (
-    item.review_status === 'reviewed'
-    && (item.publish_status === 'ready' || item.publish_status === 'publish_failed')
+    (item.input_scope ?? 'main') === 'main'
+    && item.case_type !== 'parent_unresolved'
+    && item.review_status === 'decided'
+    && (item.publish_status === 'pending' || item.publish_status === 'failed')
   );
 }
 
@@ -143,16 +115,36 @@ function isDecisionLocked(detail: ReviewCaseDetail | null | undefined) {
 
 function formatCaseTitle(item: ReviewCaseListItem | ReviewCaseDetail | null | undefined) {
   if (!item) return 'No review case selected';
-  const parentLabel =
-    item.phase === 'parent_processing' && typeof item.case_payload?.representative_parent_name === 'string'
-      ? item.case_payload.representative_parent_name
-      : '';
-  if (parentLabel.trim()) return parentLabel.trim();
-  return item.representative_source_name || item.representative_source_trace_id || item.case_id;
+  const parentLabel = readEntityLabel(item.case_payload?.representative_parent_name) || readCaseText(item.case_payload?.representative_parent_name);
+  if ((item.phase === 'parent_processing' || item.input_scope === 'parent' || item.case_type === 'parent_unresolved') && parentLabel) return parentLabel;
+
+  const payloadLabel =
+    readEntityLabel(item.case_payload?.representative_entity_name)
+    || readEntityLabel(item.case_payload?.source_entity_name)
+    || readEntityLabel(item.case_payload?.entity_name)
+    || readEntityLabel(item.case_payload?.display_name)
+    || readEntityLabel(item.case_payload?.representative_source_name);
+  if (payloadLabel) return payloadLabel;
+
+  if ('sources' in item) {
+    const labelCounts = new Map<string, number>();
+    for (const source of item.sources ?? []) {
+      const label = readEntityLabel(source.source_entity_name);
+      if (!label) continue;
+      labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+    }
+    const sourceLabel = [...labelCounts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0];
+    if (sourceLabel) return sourceLabel;
+  }
+
+  return 'Unnamed entity';
 }
 
 function isParentReviewCase(item: ReviewCaseListItem | ReviewCaseDetail | null | undefined) {
-  return item?.phase === 'parent_processing';
+  return item?.phase === 'parent_processing'
+    || item?.input_scope === 'parent'
+    || item?.case_type === 'parent_unresolved';
 }
 
 function toneClassName(tone?: string | null) {
@@ -245,7 +237,7 @@ function summarizeReviewEvent(event: ReviewEventView) {
   const message =
     (typeof payload.message === 'string' && payload.message)
     || (typeof payload.reason === 'string' && payload.reason)
-    || (typeof payload.decision === 'string' && payload.decision.split('_').join(' '))
+    || (typeof payload.decision_type === 'string' && payload.decision_type.split('_').join(' '))
     || null;
   return message;
 }
@@ -264,6 +256,191 @@ function compactExamples(
   return items
     .map((item) => item.source_entity_name || item.source_unique_id)
     .join(' · ');
+}
+
+function readNestedText(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function reviewPosture(detail: TraceDetail | undefined, selectedCase: ReviewCaseDetail | null | undefined) {
+  if (!detail || !selectedCase) return null;
+  const resolution = detail.resolution ?? {};
+  const summaryPayload = detail.decision_summaries?.[0]?.summary_payload as Record<string, unknown> | undefined;
+  const tieBreakOutcome = String(
+    summaryPayload?.tie_break_outcome
+    ?? resolution.tie_break_outcome
+    ?? '',
+  );
+  const acceptedCount = detail.candidate_evaluations.filter((candidate) =>
+    candidate.evaluation_status === 'deterministic_accept' || candidate.evaluation_status === 'agent_accept').length;
+
+  if (selectedCase.case_type === 'bridge_ambiguous_family' || String(resolution.pending_review_reason || '').includes('bridge_ambiguous_family')) {
+    return {
+      title: 'Likely existing entity, but the correct existing master is ambiguous',
+      tone: 'warning',
+      detail: acceptedCount > 1
+        ? `${acceptedCount} existing masters survived matching, so this looks more like an existing-entity ambiguity than a brand-new entity case.`
+        : 'The system found evidence for an existing entity, but it could not safely pick one target master.',
+      hint: tieBreakOutcome === 'both_same_identity'
+        ? 'Some accepted candidates appear to describe the same underlying firm or family, which suggests duplicate-master or affiliate ambiguity.'
+        : null,
+    };
+  }
+
+  if (acceptedCount === 0) {
+    return {
+      title: 'No convincing existing entity match is visible yet',
+      tone: 'info',
+      detail: 'This case may need a new master unless additional context or search turns up a better existing candidate.',
+      hint: null,
+    };
+  }
+
+  return {
+    title: acceptedCount === 1 ? 'One existing entity looks strongest' : 'Several existing entities look plausible',
+    tone: acceptedCount === 1 ? 'positive' : 'warning',
+    detail: acceptedCount === 1
+      ? 'Start by validating the strongest existing candidate before considering a new entity.'
+      : 'Start with the strongest existing candidates before considering a new entity.',
+    hint: null,
+  };
+}
+
+function rankReviewCandidates(candidates: CandidateEvaluation[]) {
+  const score = (candidate: CandidateEvaluation) => {
+    let total = 0;
+    if (candidate.final_candidate_status === 'selected') total += 100;
+    if (candidate.evaluation_status === 'deterministic_accept') total += 80;
+    if (candidate.evaluation_status === 'agent_accept') total += 70;
+    if (candidate.url_status === 'exact') total += 20;
+    if (candidate.name_match_type === 'normalized_exact') total += 15;
+    if (candidate.match_phase?.includes('phase2')) total += 5;
+    if (candidate.blocked_reason) total -= 10;
+    if (candidate.evaluation_status === 'deterministic_reject') total -= 50;
+    return total;
+  };
+
+  return [...candidates]
+    .filter((candidate) => candidate.candidate_entity_id)
+    .sort((left, right) =>
+      score(right) - score(left)
+      || (right.updated_at || '').localeCompare(left.updated_at || '')
+      || (left.candidate_entity_name || left.candidate_entity_id).localeCompare(
+        right.candidate_entity_name || right.candidate_entity_id,
+      ))
+    .slice(0, 4);
+}
+
+function candidateReviewBullets(candidate: CandidateEvaluation) {
+  const bullets: string[] = [];
+  if (candidate.url_status === 'exact') bullets.push('official URL matches');
+  else if (candidate.url_status) bullets.push(`URL status: ${humanizeToken(candidate.url_status)}`);
+  if (candidate.name_match_type) bullets.push(`name match: ${humanizeToken(candidate.name_match_type)}`);
+  if (candidate.match_phase) bullets.push(`match phase: ${humanizeToken(candidate.match_phase)}`);
+  if (candidate.agent_reason) bullets.push(candidate.agent_reason);
+  else if (candidate.blocked_reason) bullets.push(`blocked because ${humanizeToken(candidate.blocked_reason).toLowerCase()}`);
+  return bullets.slice(0, 3);
+}
+
+function isAgentRelatedCandidateStatus(status?: string | null) {
+  return status === 'agent_accept'
+    || status === 'agent_reject'
+    || status === 'agent_required'
+    || status === 'agent_insufficient'
+    || status === 'agent_prep_failed';
+}
+
+function hasAgentDetailsForEvaluation(candidate: CandidateEvaluation | ReviewCandidateSummary) {
+  return isAgentRelatedCandidateStatus(
+    'evaluation_status' in candidate ? candidate.evaluation_status : undefined,
+  ) || Boolean(
+    ('agent_reason' in candidate && candidate.agent_reason)
+    || ('agent_lane' in candidate && candidate.agent_lane)
+    || ('evaluation_payload' in candidate && candidate.evaluation_payload && Object.keys(candidate.evaluation_payload).length > 0),
+  );
+}
+
+function candidateDisplayName(candidate: CandidateEvaluation | ReviewCandidateSummary) {
+  return 'candidate_entity_id' in candidate
+    ? candidate.candidate_entity_name || candidate.candidate_entity_id
+    : candidate.entity_name || candidate.entity_id;
+}
+
+function sourceContextRows(detail: TraceDetail | undefined) {
+  if (!detail) return [];
+  const source = detail.source ?? {};
+  const currentSource = detail.current_source ?? {};
+  const resolution = detail.resolution ?? {};
+  return [
+    ['Source URL', detail.evaluation_context?.source_url_at_evaluation || readNestedText(source, ['entity_url', 'url'])],
+    ['Role', detail.source_entity_role || readNestedText(source, ['entity_role', 'role'])],
+    ['Member', detail.source_member_name || readNestedText(source, ['member_name', 'account_name', 'axial_member_name', 'axialMemberName'])],
+    ['Transaction', readNestedText(currentSource, ['transaction_id', 'transactionId', 'transaction_name', 'axial_transaction_id', 'deal_name'])],
+    ['Group key', readNestedText(resolution, ['resolution_group_key', 'raw_component_key'])],
+  ].filter(([, value]) => Boolean(value));
+}
+
+function candidateNameIndex(candidates: CandidateEvaluation[]) {
+  const byId = new Map<string, string>();
+  for (const candidate of candidates) {
+    if (candidate.candidate_entity_id && candidate.candidate_entity_name) {
+      byId.set(candidate.candidate_entity_id, candidate.candidate_entity_name);
+    }
+  }
+  return byId;
+}
+
+function rewriteCandidateLabels(
+  text: string,
+  summaryPayload: Record<string, unknown> | undefined,
+  candidates: CandidateEvaluation[],
+) {
+  if (!text || !summaryPayload) return text;
+  const mapping = summaryPayload.candidate_master_ids_by_label;
+  if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) return text;
+  const namesById = candidateNameIndex(candidates);
+  let next = text;
+  for (const [label, rawId] of Object.entries(mapping)) {
+    const entityId = String(rawId || '').trim();
+    if (!entityId) continue;
+    const entityName = namesById.get(entityId) || entityId;
+    next = next.split(label).join(`${entityName} (${entityId})`);
+  }
+  return next;
+}
+
+function conciseReviewNote(
+  summaryPayload: Record<string, unknown> | undefined,
+  candidates: CandidateEvaluation[],
+) {
+  if (!summaryPayload) return null;
+  const outcome = String(summaryPayload.tie_break_outcome || '').trim();
+  const reason = rewriteCandidateLabels(
+    String(summaryPayload.tie_break_reason || ''),
+    summaryPayload,
+    candidates,
+  ).trim();
+
+  if (outcome === 'both_same_identity') {
+    const exactUrlCandidates = candidates.filter((candidate) => candidate.url_status === 'exact');
+    const names = Array.from(new Set(
+      exactUrlCandidates
+        .map((candidate) => candidate.candidate_entity_name || candidate.candidate_entity_id)
+        .filter(Boolean),
+    )).slice(0, 3);
+    if (names.length > 0) {
+      return `${names.join(', ')} appear to describe the same underlying firm, so the review is about choosing the right existing master rather than creating a new one.`;
+    }
+    return 'Multiple accepted candidates appear to describe the same underlying firm, so the review is about choosing the right existing master rather than creating a new one.';
+  }
+
+  if (!reason) return null;
+  if (/Candidate [A-Z]/.test(reason)) return null;
+  return reason;
 }
 
 export function ReviewWorkspace({
@@ -332,17 +509,12 @@ export function ReviewWorkspace({
 
   const selectedCase = reviewCaseDetail;
   const selectedCaseId = selectedCase?.case_id ?? '';
-  const decisionOptions = getDecisionOptions(selectedCase);
+  const decisionOptions = DECISION_OPTIONS;
   const [masterSearchInput, setMasterSearchInput] = useState('');
-  const [showAllChildGroups, setShowAllChildGroups] = useState(false);
   const [showAllRecordGroups, setShowAllRecordGroups] = useState(false);
   const deferredMasterSearch = useDeferredValue(masterSearchInput.trim());
   const requiresExistingMasterSelection = requiresTargetEntityId(decision);
   const candidateEntityIds = selectedCase?.candidate_entity_ids ?? [];
-  const hasChildSideCandidate = useMemo(
-    () => (selectedCase?.candidate_summaries ?? []).some((candidate) => candidate.matches_supporting_child_entity),
-    [selectedCase?.candidate_summaries],
-  );
 
   const candidateMastersQuery = useQuery({
     queryKey: ['review-case-candidate-masters', selectedCaseId, candidateEntityIds.join(',')],
@@ -411,9 +583,13 @@ export function ReviewWorkspace({
         : ''
     : '';
 
-  const parentChildGroups = useMemo(
-    () => selectedCase?.supporting_child_groups ?? [],
-    [selectedCase?.supporting_child_groups],
+  const parentSupportingCount = useMemo(
+    () => {
+      const payloadCount = Number(selectedCase?.case_payload?.supporting_record_count || 0);
+      if (Number.isFinite(payloadCount) && payloadCount > 0) return payloadCount;
+      return selectedCase?.sources.length ?? 0;
+    },
+    [selectedCase?.case_payload?.supporting_record_count, selectedCase?.sources.length],
   );
 
   const recordGroups = useMemo(
@@ -421,23 +597,73 @@ export function ReviewWorkspace({
     [selectedCase?.sources],
   );
 
-  const visibleParentChildGroups = showAllChildGroups
-    ? parentChildGroups
-    : parentChildGroups.slice(0, 3);
-
   const visibleRecordGroups = showAllRecordGroups
     ? recordGroups
     : recordGroups.slice(0, 3);
 
   useEffect(() => {
-    setShowAllChildGroups(false);
     setShowAllRecordGroups(false);
   }, [selectedCaseId]);
 
-  const sourceByTraceId = useMemo(
-    () => new Map((selectedCase?.sources ?? []).map((source) => [source.source_trace_id, source])),
-    [selectedCase?.sources],
+  const representativeSource = useMemo(() => {
+    if (!selectedCase?.sources?.length) return null;
+    const matchingSource = selectedCase.sources.find(
+      (source) => source.source_trace_id === selectedCase.representative_source_trace_id,
+    );
+    return matchingSource ?? selectedCase.sources[0] ?? null;
+  }, [selectedCase]);
+
+  const representativeTraceDetailQuery = useQuery({
+    queryKey: ['review-representative-trace-detail', selectedRunId, representativeSource?.source_module, representativeSource?.source_unique_id, selectedCase?.input_scope],
+    queryFn: () => getTraceDetail(
+      selectedRunId!,
+      representativeSource!.source_module,
+      representativeSource!.source_unique_id,
+      selectedCase?.input_scope || 'main',
+    ),
+    enabled: Boolean(selectedRunId && representativeSource?.source_module && representativeSource?.source_unique_id),
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+  });
+  const representativeTraceDetail = representativeTraceDetailQuery.data;
+  const [historyEntityId, setHistoryEntityId] = useState('');
+  const [agentDetailsTarget, setAgentDetailsTarget] = useState<CandidateEvaluation | ReviewCandidateSummary | null>(null);
+  const topReviewCandidates = useMemo(
+    () => rankReviewCandidates(representativeTraceDetail?.candidate_evaluations ?? []),
+    [representativeTraceDetail?.candidate_evaluations],
   );
+  const reviewerPosture = useMemo(
+    () => reviewPosture(representativeTraceDetail, selectedCase),
+    [representativeTraceDetail, selectedCase],
+  );
+  const contextRows = useMemo(
+    () => sourceContextRows(representativeTraceDetail),
+    [representativeTraceDetail],
+  );
+  const latestDecisionSummary = representativeTraceDetail?.decision_summaries?.[0] as Record<string, unknown> | undefined;
+  const latestSummaryPayload = latestDecisionSummary?.summary_payload as Record<string, unknown> | undefined;
+  const transactionParticipants = useMemo(
+    () => (representativeTraceDetail?.transaction_context?.participants as Array<Record<string, unknown>> | undefined) ?? [],
+    [representativeTraceDetail?.transaction_context],
+  );
+  const transactionId = useMemo(() => {
+    const raw = representativeTraceDetail?.transaction_context?.transaction_id;
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
+  }, [representativeTraceDetail?.transaction_context]);
+  const shortReviewNote = useMemo(
+    () => conciseReviewNote(
+      latestSummaryPayload,
+      representativeTraceDetail?.candidate_evaluations ?? [],
+    ),
+    [latestSummaryPayload, representativeTraceDetail?.candidate_evaluations],
+  );
+  const masterHistoryQuery = useQuery({
+    queryKey: ['review-master-history', historyEntityId],
+    queryFn: () => getMasterEntity(historyEntityId),
+    enabled: Boolean(historyEntityId),
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+  });
 
   const toggleCaseSelection = (caseId: string) => {
     setSelectedCaseIds((current) =>
@@ -463,20 +689,15 @@ export function ReviewWorkspace({
       assigned_entity_name: source.assigned_entity_name ?? null,
       candidate_count: source.candidate_count,
       viable_candidate_count: source.viable_candidate_count,
-      anomaly_count: source.anomaly_count,
+      issue_count: source.issue_count ?? 0,
       lineages_target_record_ids: source.lineages_target_record_ids ?? [],
       derived_enrichment: source.derived_enrichment ?? {},
       updated_at: source.updated_at ?? null,
       decision_story: humanizeToken(source.resolution_status, 'pending review'),
-      has_anomalies: (source.anomaly_count ?? 0) > 0,
-      anomaly_types: [],
+      has_issues: (source.issue_count ?? 0) > 0,
+      issue_types: [],
     });
     onSourceRecordSelected?.(source);
-  };
-
-  const openSourceExampleByTraceId = (sourceTraceId: string) => {
-    const source = sourceByTraceId.get(sourceTraceId);
-    if (source) openSourceRecord(source);
   };
 
   const handleSaveDecision = () => {
@@ -484,7 +705,7 @@ export function ReviewWorkspace({
     saveDecisionMutation.mutate({
       caseId: selectedCaseId,
       payload: {
-        decision: decision as ReviewDecisionPayload['decision'],
+        decision_type: decision as ReviewDecisionPayload['decision_type'],
         target_entity_id: requiresExistingMasterSelection ? targetEntityId.trim() || null : null,
         reason: decisionReason.trim() || null,
       },
@@ -501,7 +722,6 @@ export function ReviewWorkspace({
     publishMutation.mutate({ runId: selectedRunId, caseIds: selectedPublishableCaseIds });
   };
 
-  const detailSummary = buildCaseSummary(selectedCase);
   const detailQuestion = buildCaseQuestion(selectedCase);
 
   return (
@@ -522,7 +742,7 @@ export function ReviewWorkspace({
               !selectedRunId
               || publishMutation.isPending
               || isPublishTracking
-              || (publishSummary?.reviewed_unpublished_case_count ?? 0) === 0
+              || (publishSummary?.decided_review_case_count ?? 0) === 0
             }
           >
             Publish Reviewed
@@ -615,7 +835,7 @@ export function ReviewWorkspace({
                       <div>
                           <div className="review-case-title">{formatCaseTitle(item)}</div>
                           <div className="review-case-meta">
-                          {formatLabel(item.phase)} · {formatCaseType(item.case_type)} · {item.source_count} sources
+                          {formatLabel(item.input_scope || 'main')} · {formatLabel(item.phase)} · {formatCaseType(item.case_type)} · {item.source_count} sources
                         </div>
                       </div>
                       <input
@@ -660,7 +880,7 @@ export function ReviewWorkspace({
               <div className="review-detail-head review-detail-head--narrative">
                 <div>
                   <div className="detail-eyebrow">
-                    {formatLabel(selectedCase.phase)} · {formatCaseType(selectedCase.case_type)}
+                    {formatLabel(selectedCase.input_scope || 'main')} · {formatLabel(selectedCase.phase)} · {formatCaseType(selectedCase.case_type)}
                   </div>
                   <div className="detail-name review-detail-title">{formatCaseTitle(selectedCase)}</div>
                   <div className="review-detail-sub">{detailQuestion}</div>
@@ -672,26 +892,86 @@ export function ReviewWorkspace({
               </div>
 
               <div className="review-detail-body">
-                <div className="review-overview-grid">
-                  <article className="review-overview-card review-overview-card--primary">
-                    <div className="review-overview-eyebrow">Why this case exists</div>
-                    <div className="review-overview-text">{detailSummary}</div>
-                  </article>
-                  <article className="review-overview-card">
-                    <div className="review-overview-eyebrow">Decision needed</div>
-                    <div className="review-overview-text">{detailQuestion}</div>
-                    {selectedCase.primary_stop_reason && (
-                      <div className="review-overview-note">
-                        Automation stopped because {humanizeToken(selectedCase.primary_stop_reason).toLowerCase()}
+
+                {!isParentReviewCase(selectedCase) && (
+                  <div className="review-detail-section">
+                    <div className="section-title">
+                      <span className="section-title-text">Reviewer Summary</span>
+                      {representativeTraceDetailQuery.isFetching && (
+                        <span className="section-hint">Refreshing source evidence…</span>
+                      )}
+                    </div>
+                    {representativeTraceDetailQuery.isLoading ? (
+                      <div className="review-panel-empty review-panel-empty--compact">Loading source context…</div>
+                    ) : representativeTraceDetailQuery.isError ? (
+                      <div className="review-panel-empty review-panel-empty--compact">Source context could not be loaded for this review case.</div>
+                    ) : representativeTraceDetail ? (
+                      <div className="review-summary-panel">
+                        {reviewerPosture && (
+                          <div className="review-summary-line">
+                            <span className="review-summary-label">System read</span>
+                            <span className="review-summary-value">{reviewerPosture.title}</span>
+                          </div>
+                        )}
+                        {shortReviewNote && (
+                          <div className="review-summary-note">
+                            {shortReviewNote}
+                          </div>
+                        )}
+                        {reviewerPosture?.hint && (
+                          <div className="review-summary-note">{reviewerPosture.hint}</div>
+                        )}
+                        {(transactionId || transactionParticipants.length > 0 || contextRows.length > 0) && (
+                          <details className="review-collapsible review-collapsible--summary">
+                            <summary>Transaction context</summary>
+                            <div className="review-summary-context">
+                              {contextRows.map(([label, value]) => (
+                                <div key={label} className="review-summary-line">
+                                  <span className="review-summary-label">{label}</span>
+                                  <span className="review-summary-value">{value}</span>
+                                </div>
+                              ))}
+                              {transactionId && (
+                                <div className="review-summary-line">
+                                  <span className="review-summary-label">Participants</span>
+                                  <span className="review-summary-value">
+                                    {transactionParticipants.length} entities in transaction {transactionId}
+                                  </span>
+                                </div>
+                              )}
+                              {transactionParticipants.length > 0 && (
+                                <div className="ctable-wrap review-candidate-table-wrap">
+                                  <table className="ctable review-candidate-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Entity</th>
+                                        <th>Role</th>
+                                        <th>Member</th>
+                                        <th>URL</th>
+                                        <th>Module</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {transactionParticipants.map((participant, index) => (
+                                        <tr key={`${participant.source_module ?? 'source'}-${participant.source_unique_id ?? index}`}>
+                                          <td>{String(participant.source_entity_name || participant.source_unique_id || '—')}</td>
+                                          <td>{String(participant.source_entity_role || '—')}</td>
+                                          <td>{String(participant.source_member_name || '—')}</td>
+                                          <td>{String(participant.source_entity_url || '—')}</td>
+                                          <td>{String(participant.source_module || '—')}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        )}
                       </div>
-                    )}
-                    {isParentReviewCase(selectedCase) && (
-                      <div className="review-overview-note">
-                        The child entities below are evidence for this parent label. They are not parent candidates.
-                      </div>
-                    )}
-                  </article>
-                </div>
+                    ) : null}
+                  </div>
+                )}
 
                 {isParentReviewCase(selectedCase) && (
                   <div className="review-detail-section">
@@ -703,16 +983,11 @@ export function ReviewWorkspace({
                         {String(selectedCase.case_payload?.representative_parent_name || formatCaseTitle(selectedCase))}
                       </div>
                       <div className="review-parent-label-meta">
-                        {selectedCase.sources.length} supporting record{selectedCase.sources.length !== 1 ? 's' : ''} reference this parent label.
+                        {parentSupportingCount || selectedCase.sources.length} supporting record{(parentSupportingCount || selectedCase.sources.length) !== 1 ? 's' : ''} reference this parent label.
                       </div>
                       {String(selectedCase.case_payload?.representative_parent_name || '').includes(',') && (
                         <div className="review-inline-warning">
                           This label appears to contain multiple parties, so a single-parent assignment may be unsafe.
-                        </div>
-                      )}
-                      {hasChildSideCandidate && (
-                        <div className="review-inline-note">
-                          Some parent candidates also appear among the child entities below. That can be acceptable when the parent label is self-referential.
                         </div>
                       )}
                     </div>
@@ -750,11 +1025,119 @@ export function ReviewWorkspace({
 
                 <div className="review-main-grid">
                   <div className="review-main-column">
-                    {selectedCase.candidate_summaries.length > 0 && (
+                    {!isParentReviewCase(selectedCase) && topReviewCandidates.length > 0 && (
+                      <div className="review-detail-section">
+                        <div className="section-title">
+                          <span className="section-title-text">Best Existing Candidates</span>
+                          <span className="section-hint">
+                            {representativeTraceDetail?.candidate_evaluations.length ?? 0} candidates evaluated
+                          </span>
+                        </div>
+                        <div className="ctable-wrap review-candidate-table-wrap">
+                          <table className="ctable review-candidate-table">
+                            <thead>
+                              <tr>
+                                <th>Candidate</th>
+                                <th>URL</th>
+                                <th>Status</th>
+                                <th>Evidence</th>
+                                <th>History</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {topReviewCandidates.map((candidate) => (
+                                <tr key={`${candidate.candidate_entity_id}-${candidate.updated_at ?? ''}`}>
+                                  <td>
+                                    <div className="name-cell" title={candidate.candidate_entity_name || candidate.candidate_entity_id}>
+                                      {candidate.candidate_entity_name || candidate.candidate_entity_id}
+                                    </div>
+                                    <div className="entity-id-cell">{candidate.candidate_entity_id}</div>
+                                  </td>
+                                  <td>{candidate.candidate_entity_url || '—'}</td>
+                                  <td>
+                                    <div>{humanizeToken(candidate.evaluation_status)}</div>
+                                    {hasAgentDetailsForEvaluation(candidate) && (
+                                      <button
+                                        type="button"
+                                        className="review-link-button review-link-button--inline"
+                                        onClick={() => setAgentDetailsTarget(candidate)}
+                                      >
+                                        Agent details
+                                      </button>
+                                    )}
+                                  </td>
+                                  <td>{candidateReviewBullets(candidate).join(' · ') || '—'}</td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="review-link-button review-link-button--inline"
+                                      onClick={() => setHistoryEntityId(candidate.candidate_entity_id)}
+                                    >
+                                      View history
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {isParentReviewCase(selectedCase) && selectedCase.candidate_summaries.length > 0 && (
+                      <div className="review-detail-section">
+                        <div className="section-title">
+                          <span className="section-title-text">Possible Existing Master Entities</span>
+                          <span className="section-hint">{selectedCase.candidate_summaries.length} candidates</span>
+                        </div>
+                        <div className="ctable-wrap review-candidate-table-wrap">
+                          <table className="ctable review-candidate-table">
+                            <thead>
+                              <tr>
+                                <th>Entity</th>
+                                <th>URL</th>
+                                <th>Status</th>
+                                <th>Why it could match</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedCase.candidate_summaries.map((candidate) => {
+                                return (
+                                  <tr key={candidate.entity_id}>
+                                    <td>
+                                      <div className="name-cell" title={candidate.entity_name || candidate.entity_id}>
+                                        {candidate.entity_name || candidate.entity_id}
+                                      </div>
+                                      <div className="entity-id-cell">{candidate.entity_id}</div>
+                                    </td>
+                                    <td>{candidate.entity_url || '—'}</td>
+                                    <td>
+                                      <div>{candidate.status_label || humanizeToken(candidate.tone, 'candidate')}</div>
+                                      {hasAgentDetailsForEvaluation(candidate) && (
+                                        <button
+                                          type="button"
+                                          className="review-link-button review-link-button--inline"
+                                          onClick={() => setAgentDetailsTarget(candidate)}
+                                        >
+                                          Agent details
+                                        </button>
+                                      )}
+                                    </td>
+                                    <td>{candidate.plausibility_points.join(' · ') || '—'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {!isParentReviewCase(selectedCase) && selectedCase.candidate_summaries.length > 0 && topReviewCandidates.length === 0 && (
                       <div className="review-detail-section">
                         <div className="section-title">
                           <span className="section-title-text">
-                            {isParentReviewCase(selectedCase) ? 'Possible Parent Entities' : 'Possible Existing Entities'}
+                            Possible Existing Entities
                           </span>
                         </div>
                         <div className="review-candidate-grid">
@@ -832,56 +1215,7 @@ export function ReviewWorkspace({
                       </div>
                     )}
 
-                    {isParentReviewCase(selectedCase) ? (
-                      <div className="review-detail-section">
-                        <div className="section-title">
-                          <span className="section-title-text">Child Entities Using This Parent Label</span>
-                          <span className="section-hint">{selectedCase.sources.length} supporting records</span>
-                        </div>
-                        <div className="review-support-grid">
-                          {visibleParentChildGroups.map((group) => (
-                            <article key={group.child_entity_key} className="review-support-card">
-                              <div className="review-support-head">
-                                <div>
-                                  <div className="review-support-title">{group.child_entity_name}</div>
-                                  <div className="review-support-meta">
-                                    {group.row_count} record{group.row_count !== 1 ? 's' : ''} · {group.source_modules.join(', ')}
-                                  </div>
-                                </div>
-                                {group.example_sources[0] && (
-                                  <button
-                                    type="button"
-                                    className="review-link-button review-link-button--inline"
-                                    onClick={() => openSourceExampleByTraceId(group.example_sources[0].source_trace_id)}
-                                  >
-                                    Open example
-                                  </button>
-                                )}
-                              </div>
-                              {group.example_sources.length > 0 && (
-                                <div className="review-support-snippet">
-                                  Examples: {compactExamples(group.example_sources)}
-                                </div>
-                              )}
-                              {group.hidden_source_count > 0 && (
-                                <div className="review-support-more">
-                                  +{group.hidden_source_count} more supporting record{group.hidden_source_count !== 1 ? 's' : ''}
-                                </div>
-                              )}
-                            </article>
-                          ))}
-                        </div>
-                        {parentChildGroups.length > 3 && (
-                          <button
-                            type="button"
-                            className="review-link-button"
-                            onClick={() => setShowAllChildGroups((current) => !current)}
-                          >
-                            {showAllChildGroups ? 'Show fewer child entities' : `Show all ${parentChildGroups.length} child entities`}
-                          </button>
-                        )}
-                      </div>
-                    ) : (
+                    {isParentReviewCase(selectedCase) ? null : (
                       <div className="review-detail-section">
                         <div className="section-title">
                           <span className="section-title-text">Records in This Case</span>
@@ -967,28 +1301,17 @@ export function ReviewWorkspace({
                             <span className="review-field-label">
                               {isParentReviewCase(selectedCase)
                                 ? 'Choose Parent Entity'
-                                : isMasterConsolidationCase(selectedCase)
-                                  ? 'Choose Winning Master'
-                                  : 'Choose Existing Entity'}
+                                : 'Choose Existing Entity'}
                             </span>
                             <div className="review-field-hint">
-                              {isMasterConsolidationCase(selectedCase)
-                                ? 'Start with the entities under review above. Search all existing masters only if the right winner is not already listed.'
-                                : 'Start with the candidate cards above. Search all existing entities only if none of them fit.'}
+                              Start with the listed candidates above. Search all existing entities only if none of them fit.
                             </div>
-                            {hasChildSideCandidate && (
-                              <div className="review-inline-note">
-                                A candidate can also appear among the child entities below. Choose it if the parent label is meant to self-reference that same entity.
-                              </div>
-                            )}
                             <input
                               className="topbar-input review-input"
                               value={masterSearchInput}
                               onChange={(event) => setMasterSearchInput(event.target.value)}
                               disabled={isDecisionLocked(selectedCase)}
-                              placeholder={isMasterConsolidationCase(selectedCase)
-                                ? 'search existing masters by name or URL'
-                                : 'search existing entities by name or URL'}
+                              placeholder="search existing entities by name or URL"
                             />
                             {searchedMastersQuery.isFetching && (
                               <span className="review-field-hint">Searching existing entities…</span>
@@ -1108,6 +1431,154 @@ export function ReviewWorkspace({
                   </div>
                 </div>
               </div>
+
+              {historyEntityId && (
+                <div className="review-modal-backdrop" onClick={() => setHistoryEntityId('')}>
+                  <div className="review-modal" onClick={(event) => event.stopPropagation()}>
+                    <div className="review-modal-head">
+                      <div>
+                        <div className="section-title-text">Master History</div>
+                        <div className="review-field-hint">
+                          {masterHistoryQuery.data?.entity_name || historyEntityId}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="review-link-button review-link-button--inline"
+                        onClick={() => setHistoryEntityId('')}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    {masterHistoryQuery.isLoading ? (
+                      <div className="review-panel-empty review-panel-empty--compact">Loading historical context…</div>
+                    ) : masterHistoryQuery.isError ? (
+                      <div className="review-panel-empty review-panel-empty--compact">Historical context could not be loaded.</div>
+                    ) : (
+                      <div className="review-modal-body">
+                        <div className="review-summary-line">
+                          <span className="review-summary-label">Master</span>
+                          <span className="review-summary-value">
+                            {masterHistoryQuery.data?.entity_name || historyEntityId}
+                          </span>
+                        </div>
+                        <div className="review-summary-line">
+                          <span className="review-summary-label">URL</span>
+                          <span className="review-summary-value">
+                            {masterHistoryQuery.data?.entity_url || '—'}
+                          </span>
+                        </div>
+                        {(masterHistoryQuery.data?.historical_transaction_context ?? []).length === 0 ? (
+                          <div className="review-panel-empty review-panel-empty--compact">
+                            No historical transaction context is available yet for this master.
+                          </div>
+                        ) : (
+                          (masterHistoryQuery.data?.historical_transaction_context ?? []).map((group, index) => (
+                            <details key={`${group.run_id}-${group.transaction_id}-${index}`} className="review-collapsible" open={index === 0}>
+                              <summary>
+                                {group.transaction_id} · {group.participant_count} participants · run {group.run_id}
+                              </summary>
+                              <div className="review-summary-context">
+                                <div className="ctable-wrap review-candidate-table-wrap">
+                                  <table className="ctable review-candidate-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Entity</th>
+                                        <th>Role</th>
+                                        <th>Member</th>
+                                        <th>URL</th>
+                                        <th>Module</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {group.participants.map((participant, participantIndex) => (
+                                        <tr key={`${participant.source_module}-${participant.source_unique_id}-${participantIndex}`}>
+                                          <td>{participant.source_entity_name || participant.source_unique_id || '—'}</td>
+                                          <td>{participant.source_entity_role || '—'}</td>
+                                          <td>{participant.source_member_name || '—'}</td>
+                                          <td>{participant.source_entity_url || '—'}</td>
+                                          <td>{participant.source_module || '—'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </details>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {agentDetailsTarget && (
+                <div className="review-modal-backdrop" onClick={() => setAgentDetailsTarget(null)}>
+                  <div className="review-modal" onClick={(event) => event.stopPropagation()}>
+                    <div className="review-modal-head">
+                      <div>
+                        <div className="section-title-text">Agent Details</div>
+                        <div className="review-field-hint">
+                          {candidateDisplayName(agentDetailsTarget)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="review-link-button review-link-button--inline"
+                        onClick={() => setAgentDetailsTarget(null)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="review-modal-body">
+                      <div className="review-summary-line">
+                        <span className="review-summary-label">Status</span>
+                        <span className="review-summary-value">
+                          {'evaluation_status' in agentDetailsTarget
+                            ? humanizeToken(agentDetailsTarget.evaluation_status, 'agent')
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className="review-summary-line">
+                        <span className="review-summary-label">Agent kind</span>
+                        <span className="review-summary-value">
+                          {'agent_lane' in agentDetailsTarget
+                            ? humanizeToken(agentDetailsTarget.agent_lane, 'unknown')
+                            : 'unknown'}
+                        </span>
+                      </div>
+                      {'agent_decision' in agentDetailsTarget && agentDetailsTarget.agent_decision && (
+                        <div className="review-summary-line">
+                          <span className="review-summary-label">Agent decision</span>
+                          <span className="review-summary-value">{humanizeToken(agentDetailsTarget.agent_decision)}</span>
+                        </div>
+                      )}
+                      {'agent_confidence' in agentDetailsTarget && agentDetailsTarget.agent_confidence && (
+                        <div className="review-summary-line">
+                          <span className="review-summary-label">Confidence</span>
+                          <span className="review-summary-value">{humanizeToken(agentDetailsTarget.agent_confidence)}</span>
+                        </div>
+                      )}
+                      {'agent_reason' in agentDetailsTarget && agentDetailsTarget.agent_reason && (
+                        <div className="review-summary-note">{agentDetailsTarget.agent_reason}</div>
+                      )}
+                      {'evaluation_payload' in agentDetailsTarget && agentDetailsTarget.evaluation_payload && Object.keys(agentDetailsTarget.evaluation_payload).length > 0 ? (
+                        <details className="review-collapsible" open>
+                          <summary>Agent request and response payload</summary>
+                          <div className="review-technical-panel">
+                            <JsonHighlight data={agentDetailsTarget.evaluation_payload} />
+                          </div>
+                        </details>
+                      ) : (
+                        <div className="review-panel-empty review-panel-empty--compact">
+                          No stored agent payload is available for this candidate.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
