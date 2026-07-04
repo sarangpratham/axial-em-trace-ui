@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { AppTopbar } from '../components/AppTopbar';
 import { ReviewWorkspace } from '../components/review/ReviewWorkspace';
+import { PageContainer, PageHeader } from '../components/workbench/layout';
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
 import {
   createReviewPublish,
@@ -34,6 +34,26 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
   const [activePublishId, setActivePublishId] = useState<string | null>(null);
   const [lastPublishBatch, setLastPublishBatch] = useState<ReviewPublishBatch | null>(null);
   const [publishBatchError, setPublishBatchError] = useState<string | null>(null);
+  const savedDecision = typeof reviewCaseDetail?.decision_payload?.decision_type === 'string'
+    ? String(reviewCaseDetail.decision_payload.decision_type)
+    : '';
+  const savedTarget = typeof reviewCaseDetail?.decision_payload?.target_entity_id === 'string'
+    ? String(reviewCaseDetail.decision_payload.target_entity_id)
+    : '';
+  const savedReason = typeof reviewCaseDetail?.decision_payload?.reason === 'string'
+    ? String(reviewCaseDetail.decision_payload.reason)
+    : '';
+  const hasUnsavedChanges = Boolean(reviewCaseDetail)
+    && (decision !== savedDecision || targetEntityId !== savedTarget || decisionReason !== savedReason);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   useEffect(() => {
     setSelectedCaseIds((current) =>
@@ -143,20 +163,24 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
     [lastPublishBatch, publishBatchQuery.data],
   );
 
-  const openSourceRecord = (_source: NonNullable<typeof reviewCaseDetail>['sources'][number]) => {
-    navigate('/explorer');
+  const openSourceRecord = (source: NonNullable<typeof reviewCaseDetail>['sources'][number]) => {
+    explorer.openSourceRecord(source.source_module, source.source_unique_id);
+    const search = new URLSearchParams({
+      run_id: explorer.selectedRunId,
+      selected_module: source.source_module,
+      selected_unique_id: source.source_unique_id,
+    });
+    navigate(`/explorer?${search.toString()}`);
   };
 
   return (
-    <div className="shell shell--review">
-      <AppTopbar
-        currentView="review"
-        runIds={explorer.runsQuery.data ?? []}
-        selectedRunId={explorer.selectedRunId}
-        onRunChange={(runId) => explorer.updateParam('run_id', runId)}
-      />
-
-      <div className="review-page-shell">
+      <PageContainer className="max-w-none xl:max-w-[1680px]">
+        <PageHeader
+          eyebrow="Human decisions"
+          title="Resolve the cases automation could not"
+          description="Work from the queue into evidence, make a guarded decision, and publish only cases that pass every eligibility check."
+        />
+        <div className="review-page-shell review-page-shell--v2">
         <ReviewWorkspace
           explorer={explorer}
           selectedCaseIds={selectedCaseIds}
@@ -172,9 +196,10 @@ export function ReviewPage({ explorer }: { explorer: TraceExplorerState }) {
           publishBatch={publishBatch}
           publishBatchError={publishBatchError}
           isPublishTracking={Boolean(activePublishId)}
+          hasUnsavedChanges={hasUnsavedChanges}
           onSourceRecordSelected={openSourceRecord}
         />
-      </div>
-    </div>
+        </div>
+      </PageContainer>
   );
 }

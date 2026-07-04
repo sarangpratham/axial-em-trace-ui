@@ -7,9 +7,9 @@ import {
   writeStoredThemeMode,
 } from '../src/lib/theme.ts';
 
-test('theme defaults to dark when no storage is available', () => {
+test('theme defaults to light when no storage is available', () => {
   assert.equal(readStoredThemeMode(null), DEFAULT_THEME_MODE);
-  assert.equal(resolveThemeMode(null), 'dark');
+  assert.equal(resolveThemeMode(null), 'light');
 });
 
 test('theme reads a persisted light preference', () => {
@@ -23,7 +23,7 @@ test('theme reads a persisted light preference', () => {
   assert.equal(readStoredThemeMode(storage), 'light');
 });
 
-test('invalid stored theme falls back to dark and persisted writes use the theme key', () => {
+test('invalid stored theme falls back to light and persisted writes use the theme key', () => {
   const writes: Array<[string, string]> = [];
   const storage = {
     getItem() {
@@ -34,7 +34,7 @@ test('invalid stored theme falls back to dark and persisted writes use the theme
     },
   };
 
-  assert.equal(readStoredThemeMode(storage), 'dark');
+  assert.equal(readStoredThemeMode(storage), 'light');
   writeStoredThemeMode('light', storage);
   assert.deepEqual(writes, [['decision-tracer:theme-mode', 'light']]);
 });

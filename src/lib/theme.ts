@@ -1,7 +1,7 @@
 export type ThemeMode = 'dark' | 'light';
 
 export const THEME_STORAGE_KEY = 'decision-tracer:theme-mode';
-export const DEFAULT_THEME_MODE: ThemeMode = 'dark';
+export const DEFAULT_THEME_MODE: ThemeMode = 'light';
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === 'dark' || value === 'light';

@@ -2,41 +2,45 @@ import {
   humanizeToken,
   normalizeSourceResolutionStatus,
 } from '../lib/sourceResolution';
+import { AlertTriangle, Check, CircleDot, Clock3, X } from 'lucide-react';
+import { Badge } from './ui/badge';
 
 type StatusBadgeProps = {
   label: string | null | undefined;
   variant?: 'status' | 'origin';
 };
 
-const STATUS_MAP: Record<string, { cls: string; text: string }> = {
-  assigned_existing_master: { cls: 'match', text: 'assigned existing master' },
-  created_new_master: { cls: 'new_entity', text: 'created new master' },
-  needs_review_multi_master: { cls: 'review', text: 'needs review: multiple masters' },
-  unresolved: { cls: 'review', text: 'unresolved' },
-  open: { cls: 'review', text: 'needs review' },
-  decided: { cls: 'review_ready', text: 'decided' },
-  resolved: { cls: 'review_ready', text: 'resolved' },
-  pending: { cls: 'review_ready', text: 'pending publish' },
-  publish_blocked: { cls: 'review_blocked', text: 'publish blocked' },
-  failed: { cls: 'review_failed', text: 'failed' },
-  published: { cls: 'review_published', text: 'published' },
-  deterministic: { cls: 'master', text: 'deterministic' },
-  url_web_agent: { cls: 'incoming', text: 'url/web agent' },
-  context_agent: { cls: 'incoming', text: 'context agent' },
-  human_review: { cls: 'review', text: 'human review' },
-  selected: { cls: 'match', text: 'selected' },
-  deterministic_accept: { cls: 'match', text: 'deterministic accept' },
-  agent_accept: { cls: 'match', text: 'agent accept' },
-  rejected: { cls: 'no_match', text: 'rejected' },
-  deterministic_reject: { cls: 'no_match', text: 'deterministic reject' },
-  agent_reject: { cls: 'no_match', text: 'agent reject' },
-  blocked: { cls: 'review_blocked', text: 'blocked' },
-  viable_not_selected: { cls: 'second_pass', text: 'viable not selected' },
-  suppressed: { cls: 'neutral', text: 'suppressed' },
-  agent_required: { cls: 'review_blocked', text: 'agent required' },
-  agent_insufficient: { cls: 'review_blocked', text: 'agent insufficient' },
-  master_entities: { cls: 'master', text: 'master' },
-  incoming_entities: { cls: 'incoming', text: 'incoming' },
+type StatusTone = 'default' | 'secondary' | 'success' | 'warning' | 'destructive' | 'outline';
+
+const STATUS_MAP: Record<string, { tone: StatusTone; text: string; icon?: typeof Check }> = {
+  assigned_existing_master: { tone: 'success', text: 'assigned existing master', icon: Check },
+  created_new_master: { tone: 'default', text: 'created new master', icon: CircleDot },
+  needs_review_multi_master: { tone: 'warning', text: 'needs review: multiple masters', icon: AlertTriangle },
+  unresolved: { tone: 'warning', text: 'unresolved', icon: AlertTriangle },
+  open: { tone: 'warning', text: 'needs review', icon: AlertTriangle },
+  decided: { tone: 'default', text: 'decided', icon: Check },
+  resolved: { tone: 'success', text: 'resolved', icon: Check },
+  pending: { tone: 'secondary', text: 'pending publish', icon: Clock3 },
+  publish_blocked: { tone: 'warning', text: 'publish blocked', icon: AlertTriangle },
+  failed: { tone: 'destructive', text: 'failed', icon: X },
+  published: { tone: 'success', text: 'published', icon: Check },
+  deterministic: { tone: 'secondary', text: 'deterministic' },
+  url_web_agent: { tone: 'default', text: 'url/web agent' },
+  context_agent: { tone: 'default', text: 'context agent' },
+  human_review: { tone: 'warning', text: 'human review' },
+  selected: { tone: 'success', text: 'selected', icon: Check },
+  deterministic_accept: { tone: 'success', text: 'deterministic accept', icon: Check },
+  agent_accept: { tone: 'success', text: 'agent accept', icon: Check },
+  rejected: { tone: 'destructive', text: 'rejected', icon: X },
+  deterministic_reject: { tone: 'destructive', text: 'deterministic reject', icon: X },
+  agent_reject: { tone: 'destructive', text: 'agent reject', icon: X },
+  blocked: { tone: 'warning', text: 'blocked', icon: AlertTriangle },
+  viable_not_selected: { tone: 'secondary', text: 'viable not selected' },
+  suppressed: { tone: 'outline', text: 'suppressed' },
+  agent_required: { tone: 'warning', text: 'agent required' },
+  agent_insufficient: { tone: 'warning', text: 'agent insufficient' },
+  master_entities: { tone: 'secondary', text: 'master' },
+  incoming_entities: { tone: 'default', text: 'incoming' },
 };
 
 export function StatusBadge({ label }: StatusBadgeProps) {
@@ -45,11 +49,8 @@ export function StatusBadge({ label }: StatusBadgeProps) {
     STATUS_MAP[normalizeSourceResolutionStatus(label) ?? label]
     ?? STATUS_MAP[label];
   if (mapped) {
-    return (
-      <span className={`badge badge--${mapped.cls}`}>
-        {mapped.text}
-      </span>
-    );
+    const Icon = mapped.icon;
+    return <Badge variant={mapped.tone}>{Icon && <Icon aria-hidden="true" />}{mapped.text}</Badge>;
   }
-  return <span className="badge badge--neutral">{humanizeToken(label, label)}</span>;
+  return <Badge variant="outline">{humanizeToken(label, label)}</Badge>;
 }

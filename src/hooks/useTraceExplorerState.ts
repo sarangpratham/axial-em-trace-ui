@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { getRunSummary, getRuns, getTraceDetail, getTraces } from '../lib/api';
 import {
   isAssignedExistingMaster,
@@ -60,7 +60,11 @@ function useSessionStringState(key: string, initialValue = '') {
 }
 
 export function useTraceExplorerState() {
-  const [params] = useSearchParams();
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const isExplorerRoute = location.pathname === '/explorer';
+  const isIssuesRoute = location.pathname === '/issues';
+  const isReviewRoute = location.pathname === '/review';
   const [jsonOpen, setJsonOpen] = useState(false);
   const [searchInput, setSearchInputState] = useSessionStringState(
     SESSION_KEYS.searchInput,
@@ -146,7 +150,7 @@ export function useTraceExplorerState() {
   const summaryQuery = useQuery({
     queryKey: ['summary', selectedRunId],
     queryFn: () => getRunSummary(selectedRunId),
-    enabled: Boolean(selectedRunId),
+    enabled: Boolean(selectedRunId && (isExplorerRoute || isIssuesRoute)),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
@@ -177,7 +181,7 @@ export function useTraceExplorerState() {
               : undefined,
         issueType: issueTypeFilter || undefined,
       }),
-    enabled: Boolean(selectedRunId),
+    enabled: Boolean(selectedRunId && isExplorerRoute),
     staleTime: 20_000,
     gcTime: 5 * 60_000,
   });
@@ -246,7 +250,7 @@ export function useTraceExplorerState() {
         selectedTrace!.source_module,
         selectedTrace!.source_unique_id,
       ),
-    enabled: Boolean(selectedRunId && selectedTrace),
+    enabled: Boolean(selectedRunId && selectedTrace && isExplorerRoute),
     staleTime: 60_000,
     gcTime: 10 * 60_000,
   });
@@ -277,7 +281,7 @@ export function useTraceExplorerState() {
         reviewStatus: reviewFilters.reviewStatus,
         publishStatus: reviewFilters.publishStatus,
       }),
-    enabled: Boolean(selectedRunId),
+    enabled: Boolean(selectedRunId && isReviewRoute),
     staleTime: 20_000,
     gcTime: 5 * 60_000,
   });
@@ -285,7 +289,7 @@ export function useTraceExplorerState() {
   const publishSummaryQuery = useQuery({
     queryKey: ['publish-summary', selectedRunId],
     queryFn: () => getRunPublishSummary(selectedRunId),
-    enabled: Boolean(selectedRunId),
+    enabled: Boolean(selectedRunId && isReviewRoute),
     staleTime: 20_000,
     gcTime: 5 * 60_000,
   });
@@ -307,7 +311,7 @@ export function useTraceExplorerState() {
   const reviewCaseDetailQuery = useQuery({
     queryKey: ['review-case-detail', selectedRunId, selectedReviewCase?.case_id],
     queryFn: () => getReviewCase(selectedRunId, selectedReviewCase!.case_id),
-    enabled: Boolean(selectedRunId && selectedReviewCase?.case_id),
+    enabled: Boolean(selectedRunId && selectedReviewCase?.case_id && isReviewRoute),
     staleTime: 20_000,
     gcTime: 5 * 60_000,
   });
@@ -327,7 +331,19 @@ export function useTraceExplorerState() {
     ? `${selectedTrace.source_module}::${selectedTrace.source_unique_id}`
     : undefined;
 
+  const writeParams = (updates: Record<string, string>) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      });
+      return next;
+    }, { replace: true });
+  };
+
   const updateParam = (key: string, value: string) => {
+    writeParams({ [key]: value });
     switch (key) {
       case 'run_id':
         setSelectedRunId(value);
@@ -352,15 +368,18 @@ export function useTraceExplorerState() {
 
   const setSearchInput = (value: string) => {
     setSearchInputState(value);
+    writeParams({ q: value });
   };
 
   const setIssuePresenceFilter = (value: 'all' | 'with' | 'clean') => {
     setIssuePresenceFilterState(value);
+    writeParams({ has_issues: value === 'all' ? '' : String(value === 'with'), issue_type: value === 'clean' ? '' : issueTypeFilter });
     if (value === 'clean') setIssueTypeFilterState('');
   };
 
   const setIssueTypeFilter = (value: string) => {
     setIssueTypeFilterState(value);
+    writeParams({ issue_type: value, has_issues: value ? 'true' : issuePresenceFilter === 'all' ? '' : String(issuePresenceFilter === 'with') });
     if (value) {
       setIssuePresenceFilterState('with');
     }
@@ -370,21 +389,25 @@ export function useTraceExplorerState() {
     setJsonOpen(false);
     setSelectedModule(trace.source_module);
     setSelectedUniqueId(trace.source_unique_id);
+    writeParams({ selected_module: trace.source_module, selected_unique_id: trace.source_unique_id });
   };
 
   const openSourceRecord = (sourceModule: string, sourceUniqueId: string) => {
     setJsonOpen(false);
     setSelectedModule(sourceModule);
     setSelectedUniqueId(sourceUniqueId);
+    writeParams({ selected_module: sourceModule, selected_unique_id: sourceUniqueId });
   };
 
   const setReviewTab = (value: string) => {
     setReviewTabState(value);
     setSelectedReviewCaseId('');
+    writeParams({ review_tab: value, review_case_id: '' });
   };
 
   const selectReviewCase = (caseId: string) => {
     setSelectedReviewCaseId(caseId);
+    writeParams({ review_case_id: caseId });
   };
 
   return {

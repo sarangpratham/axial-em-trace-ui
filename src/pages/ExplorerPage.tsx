@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { AppTopbar } from '../components/AppTopbar';
+import { AlertTriangle, Bot, ChevronRight, Database, FilterX, Hexagon, RefreshCcw, Route, Search, Sparkles, Trophy } from 'lucide-react';
 import { CandidateInspector } from '../components/CandidateInspector';
 import { DecisionPipeline } from '../components/DecisionPipeline';
 import { JsonHighlight } from '../components/JsonHighlight';
 import { StatusBadge } from '../components/StatusBadge';
 import { TraceList } from '../components/TraceList';
+import { Button } from '../components/ui/button';
+import { EmptyState, ErrorState, FilterBar, FilterField, LoadingState, MetricCard, PageContainer, PageHeader, WorkspacePanel } from '../components/workbench/layout';
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
 import type { AgentActivityRecord, ResolutionTimelineEvent } from '../types';
 import { humanizeToken, sourceResolutionLabel } from '../lib/sourceResolution';
@@ -93,7 +95,7 @@ function RetrievalSection({
   return (
     <div className="section">
       <div className="section-title">
-        <span className="section-title-text">⊛ Candidate Retrieval</span>
+        <span className="section-title-text"><Route aria-hidden="true" /> Candidate Retrieval</span>
         <span className="section-hint">how the retrieval pool was built before evaluation</span>
       </div>
 
@@ -169,9 +171,7 @@ function RetrievalSection({
 
       <details className="payload-disclosure">
         <summary>Raw retrieval payload</summary>
-        <div className="json-body json-body--embedded">
-          <JsonHighlight data={retrievalDebug} />
-        </div>
+        <JsonHighlight className="json-body json-body--embedded" data={retrievalDebug} />
       </details>
     </div>
   );
@@ -185,12 +185,12 @@ function TimelineSection({ events }: { events: ResolutionTimelineEvent[] }) {
       <button type="button" className={`timeline-toggle${open ? ' timeline-toggle--open' : ''}`} onClick={() => setOpen((value) => !value)}>
         <div className="timeline-toggle-copy">
           <div className="section-title">
-            <span className="section-title-text">↻ Resolution Timeline</span>
+            <span className="section-title-text"><RefreshCcw aria-hidden="true" /> Resolution Timeline</span>
             <span className="section-hint">what changed across the run</span>
           </div>
           <span className="timeline-toggle-count">{events.length} events</span>
         </div>
-        <span className={`timeline-toggle-chevron${open ? ' timeline-toggle-chevron--open' : ''}`}>▶</span>
+        <ChevronRight aria-hidden="true" className={`timeline-toggle-chevron${open ? ' timeline-toggle-chevron--open' : ''}`} />
       </button>
       {open && (
         <div className="timeline-list">
@@ -204,9 +204,7 @@ function TimelineSection({ events }: { events: ResolutionTimelineEvent[] }) {
               {hasObjectContent(event.payload) && (
                 <details className="payload-disclosure">
                   <summary>Raw payload</summary>
-                  <div className="json-body json-body--embedded">
-                    <JsonHighlight data={event.payload} />
-                  </div>
+                  <JsonHighlight className="json-body json-body--embedded" data={event.payload} />
                 </details>
               )}
             </div>
@@ -222,7 +220,7 @@ function AgentActivitySection({ activities }: { activities: AgentActivityRecord[
   return (
     <div className="section">
       <div className="section-title">
-        <span className="section-title-text">⌘ Agent Activity</span>
+        <span className="section-title-text"><Bot aria-hidden="true" /> Agent Activity</span>
         <span className="section-hint">what the model actually saw and decided</span>
       </div>
       <div className="agent-list">
@@ -250,15 +248,11 @@ function AgentActivitySection({ activities }: { activities: AgentActivityRecord[
                 <div className="payload-grid">
                   <div>
                     <div className="payload-title">Prompt payload</div>
-                    <div className="json-body json-body--embedded">
-                      <JsonHighlight data={activity.raw_prompt_payload} />
-                    </div>
+                    <JsonHighlight className="json-body json-body--embedded" data={activity.raw_prompt_payload} />
                   </div>
                   <div>
                     <div className="payload-title">Response payload</div>
-                    <div className="json-body json-body--embedded">
-                      <JsonHighlight data={activity.raw_response_payload} />
-                    </div>
+                    <JsonHighlight className="json-body json-body--embedded" data={activity.raw_response_payload} />
                   </div>
                 </div>
               </details>
@@ -439,7 +433,7 @@ function ExplorerToolbar({ explorer }: { explorer: TraceExplorerState }) {
   );
 }
 
-export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
+function LegacyExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
   const {
     detail,
     detailQuery,
@@ -477,15 +471,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
   })();
 
   return (
-    <div className="shell shell--explorer">
-      <AppTopbar
-        currentView="explorer"
-        runIds={explorer.runsQuery.data ?? []}
-        selectedRunId={explorer.selectedRunId}
-        onRunChange={(runId) => explorer.updateParam('run_id', runId)}
-      />
-
-      <div className="explorer-shell">
+      <div className="explorer-shell explorer-shell--workbench">
         <ExplorerToolbar explorer={explorer} />
 
         <aside className="sidebar">
@@ -500,7 +486,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
             </div>
           ) : tracesQuery.isError ? (
             <div className="error-state">
-              <span>⚠</span>
+              <AlertTriangle aria-hidden="true" />
               Failed to load traces
             </div>
           ) : (
@@ -516,7 +502,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
         <main className="main">
           {!selectedTrace ? (
             <div className="empty-state empty-state--panel">
-              <span className="empty-icon">⬡</span>
+              <Hexagon aria-hidden="true" className="empty-icon" />
               <p>Select an entity to inspect its decision story</p>
             </div>
           ) : detailQuery.isLoading ? (
@@ -526,7 +512,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
             </div>
           ) : detailQuery.isError ? (
             <div className="error-state error-state--panel">
-              <span>⚠</span>
+              <AlertTriangle aria-hidden="true" />
               Failed to load trace detail
             </div>
           ) : detail ? (
@@ -587,7 +573,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
 
               <div className="section">
                 <div className="section-title">
-                  <span className="section-title-text">⟶ Resolution Pipeline</span>
+                  <span className="section-title-text"><Route aria-hidden="true" /> Resolution Pipeline</span>
                   <span className="section-hint">click a step to inspect</span>
                 </div>
                 <DecisionPipeline detail={detail} />
@@ -595,12 +581,12 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
 
               <div className="section">
                 <div className="section-title">
-                  <span className="section-title-text">◎ Outcome Details</span>
+                  <span className="section-title-text"><Hexagon aria-hidden="true" /> Outcome Details</span>
                 </div>
                 <div className="outcome-grid">
                   {isMatch ? (
                     <div className="winner-strip">
-                      <span className="winner-icon">🏆</span>
+                      <span className="winner-icon"><Trophy aria-hidden="true" /></span>
                       <div>
                         <div className="winner-label">Assigned Master</div>
                         <div className="winner-name">{detail.assigned_entity_name || detail.assigned_entity_id || 'Assigned entity'}</div>
@@ -616,7 +602,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
                     </div>
                   ) : isNew ? (
                     <div className="winner-strip winner-strip--new">
-                      <span className="winner-icon">✦</span>
+                      <span className="winner-icon"><Sparkles aria-hidden="true" /></span>
                       <div>
                         <div className="winner-label winner-label--new">Created New Master</div>
                         <div className="winner-name" style={{ color: 'var(--text2)' }}>
@@ -711,7 +697,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
                 )}
 
                 <button className={`json-toggle${jsonOpen ? ' json-toggle--open' : ''}`} onClick={() => setJsonOpen((value) => !value)}>
-                  <span className={`json-chevron${jsonOpen ? ' json-chevron--open' : ''}`}>▶</span>
+                  <ChevronRight aria-hidden="true" className={`json-chevron${jsonOpen ? ' json-chevron--open' : ''}`} />
                   Source data JSON
                   <span className="json-hint">raw vs current</span>
                 </button>
@@ -719,15 +705,11 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
                   <div className="source-json-grid">
                     <div className="source-json-card">
                       <div className="source-json-title">Original Source Snapshot JSON</div>
-                      <div className="json-body json-body--embedded">
-                        <JsonHighlight data={rawSource} />
-                      </div>
+                      <JsonHighlight className="json-body json-body--embedded" data={rawSource} />
                     </div>
                     <div className="source-json-card">
                       <div className="source-json-title">Current Written-Back Source JSON</div>
-                      <div className="json-body json-body--embedded">
-                        <JsonHighlight data={currentSource} />
-                      </div>
+                      <JsonHighlight className="json-body json-body--embedded" data={currentSource} />
                     </div>
                   </div>
                 )}
@@ -736,6 +718,74 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
           ) : null}
         </main>
       </div>
-    </div>
   );
 }
+
+const EXPLORER_TABS = ['overview', 'decision path', 'candidates', 'retrieval', 'activity', 'raw data'] as const;
+const explorerControlClass = 'h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15';
+
+export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
+  const [activeTab, setActiveTab] = useState<(typeof EXPLORER_TABS)[number]>('overview');
+  const {
+    detail, detailQuery, isMatch, isNew, selectedTrace, selectedTraceKey, selectTrace,
+    traces, tracesQuery, searchInput, setSearchInput, moduleFilter, statusFilter,
+    decisionSourceFilter, updateParam, issuePresenceFilter, setIssuePresenceFilter,
+    issueTypeFilter, setIssueTypeFilter, availableIssueTypes, summary,
+  } = explorer;
+  const retrievalDebug = detail?.retrieval_debug ?? detail?.retrieval_summary ?? {};
+  const retrievalCount = typeof retrievalDebug.candidate_count === 'number'
+    ? retrievalDebug.candidate_count
+    : typeof retrievalDebug.final_candidate_count === 'number'
+      ? retrievalDebug.final_candidate_count
+      : detail?.candidate_count ?? 0;
+  const rawSource = detail?.raw_source ?? detail?.source ?? {};
+  const currentSource = detail?.current_source ?? detail?.source ?? {};
+  const changedFields = detail?.evaluation_context?.changed_fields ?? [];
+  const resetFilters = () => {
+    setSearchInput(''); updateParam('module', ''); updateParam('resolution_status', '');
+    updateParam('decision_source', ''); setIssuePresenceFilter('all'); setIssueTypeFilter('');
+  };
+
+  return (
+    <PageContainer className="max-w-none xl:max-w-[1600px]">
+      <PageHeader eyebrow="Decision evidence" title="Follow every resolution from source to outcome" description="Find a source record, understand the path the system took, and inspect supporting evidence without losing your place." />
+      <FilterBar>
+        <FilterField label="Search" className="min-w-[210px] flex-1"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><input className={`${explorerControlClass} w-full pl-9`} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Entity name or ID" /></div></FilterField>
+        <FilterField label="Module"><select className={explorerControlClass} value={moduleFilter} onChange={(e) => updateParam('module', e.target.value)}><option value="">All modules</option>{MODULE_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}</select></FilterField>
+        <FilterField label="Outcome"><select className={explorerControlClass} value={statusFilter} onChange={(e) => updateParam('resolution_status', e.target.value)}><option value="">All outcomes</option><option value="assigned_existing_master">Assigned existing</option><option value="created_new_master">Created new</option><option value="needs_review_multi_master">Needs review</option><option value="unresolved">Unresolved</option></select></FilterField>
+        <FilterField label="Decision source"><select className={explorerControlClass} value={decisionSourceFilter} onChange={(e) => updateParam('decision_source', e.target.value)}><option value="">All sources</option><option value="deterministic">Deterministic</option><option value="url_web_agent">URL/web agent</option><option value="context_agent">Context agent</option><option value="human_review">Human review</option></select></FilterField>
+        <FilterField label="Issues"><select className={explorerControlClass} value={issuePresenceFilter} onChange={(e) => setIssuePresenceFilter(e.target.value as 'all' | 'with' | 'clean')}>{ISSUE_PRESENCE_OPTIONS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}</select></FilterField>
+        <FilterField label="Issue type"><select className={explorerControlClass} value={issueTypeFilter} onChange={(e) => setIssueTypeFilter(e.target.value)} disabled={issuePresenceFilter === 'clean'}><option value="">All types</option>{availableIssueTypes.map(([type, count]) => <option key={type} value={type}>{formatIssueLabel(type)} ({count})</option>)}</select></FilterField>
+        <Button variant="ghost" onClick={resetFilters}><FilterX />Reset</Button>
+      </FilterBar>
+
+      {summary && <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Processed sources" value={summary.processed_source_count} /><MetricCard label="Assigned existing" value={summary.resolved_existing_master_count} tone="success" /><MetricCard label="Created new" value={summary.created_new_master_count} tone="primary" /><MetricCard label="Needs review" value={summary.pending_review_source_count} tone={summary.pending_review_source_count ? 'warning' : 'neutral'} detail={`${summary.issue_count ?? 0} issue signals`} /></div>}
+
+      <div className="grid min-h-[580px] items-stretch gap-3 lg:h-[calc(100dvh-240px)] lg:max-h-[820px] lg:grid-cols-[290px_minmax(0,1fr)]">
+        <WorkspacePanel className="flex h-full min-h-0 flex-col">
+          <div className="flex min-h-14 items-center justify-between border-b border-border px-4 py-2.5"><div><h3 className="text-sm font-semibold">Source records</h3><p className="text-[11px] text-muted-foreground">{traces.length} visible results</p></div><Database className="size-4 text-muted-foreground" /></div>
+          <div className="min-h-0 flex-1 overflow-y-auto">{tracesQuery.isLoading ? <LoadingState label="Loading records" /> : tracesQuery.isError ? <ErrorState message="Source records could not be loaded." onRetry={() => void tracesQuery.refetch()} /> : <TraceList traces={traces} selectedTraceId={selectedTraceKey} activeIssueType={issueTypeFilter} onSelect={(trace) => { selectTrace(trace); setActiveTab('overview'); }} />}</div>
+        </WorkspacePanel>
+
+        <WorkspacePanel className="h-full min-h-0 overflow-hidden">
+          {!selectedTrace ? <EmptyState title="Choose a source record" description="Its identity, outcome, decision path, candidates, and raw evidence will appear here." /> : detailQuery.isLoading ? <LoadingState label="Loading decision evidence" /> : detailQuery.isError ? <ErrorState message="The selected source detail could not be loaded." onRetry={() => void detailQuery.refetch()} /> : detail ? (
+            <div className="flex h-full min-h-0 flex-col" key={`${detail.source_module}:${detail.source_unique_id}`}>
+              <div className="shrink-0 border-b border-border p-3.5"><div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between"><div className="min-w-0"><div className="font-mono text-[10px] text-muted-foreground">{detail.source_module} · {detail.source_unique_id}</div><h2 className="mt-1 text-lg font-semibold tracking-[-0.025em]">{detail.source_entity_name || 'Unnamed source entity'}</h2><p className="mt-1 line-clamp-2 max-w-3xl text-xs leading-5 text-muted-foreground">{detail.decision_story}</p></div><div className="flex flex-wrap gap-1.5"><StatusBadge label={detail.resolution_status} />{detail.decision_source && <StatusBadge label={detail.decision_source} />}</div></div><div className="mt-2.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Candidates" value={detail.candidate_count} /><MetricCard label="Viable" value={detail.viable_candidate_count} tone="success" /><MetricCard label="Retrieved" value={retrievalCount} /><MetricCard label="Issue signals" value={detail.issue_count ?? 0} tone={detail.issue_count ? 'warning' : 'neutral'} /></div></div>
+              <div className="shrink-0 overflow-x-auto border-b border-border px-3"><div className="flex min-w-max gap-0.5">{EXPLORER_TABS.map((tab) => <button key={tab} type="button" className={`border-b-2 px-2.5 py-2.5 text-xs capitalize transition-colors ${activeTab === tab ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div></div>
+              <div className="explorer-tab-panel min-h-0 flex-1 overflow-y-auto p-3">
+                {activeTab === 'overview' && <div className="grid gap-3 xl:grid-cols-2"><div className={`rounded-[10px] border p-4 ${isMatch ? 'border-success/25 bg-success/5' : isNew ? 'border-primary/25 bg-primary/5' : 'border-warning/25 bg-warning/5'}`}><div className="text-[11px] font-medium text-muted-foreground">Resolution outcome</div><div className="mt-2 flex items-start gap-2.5">{isMatch ? <Trophy className="size-5 text-success" /> : <Sparkles className="size-5 text-primary" />}<div><div className="font-semibold">{isMatch ? detail.assigned_entity_name || detail.assigned_entity_id : isNew ? 'New master created' : sourceResolutionLabel(detail.resolution_status)}</div><div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{detail.assigned_entity_id || 'Human decision required'}</div></div></div></div><div className="rounded-[10px] border border-border bg-muted/45 p-4"><div className="text-[11px] font-medium text-muted-foreground">Evaluation snapshot</div><dl className="mt-2 grid gap-2 text-xs"><div><dt className="text-muted-foreground">Source URL at evaluation</dt><dd className="mt-0.5 break-all font-mono text-[11px]">{detail.evaluation_context?.source_url_at_evaluation || 'Missing'}</dd></div><div><dt className="text-muted-foreground">Current source URL</dt><dd className="mt-0.5 break-all font-mono text-[11px]">{detail.evaluation_context?.current_source_url || 'Missing'}</dd></div></dl></div>{changedFields.length > 0 && <div className="xl:col-span-2 rounded-[10px] border border-border p-4"><h3 className="text-sm font-semibold">Changed after processing</h3><div className="mt-2 flex flex-wrap gap-1.5">{changedFields.map((field) => <span key={field} className="rounded-full bg-muted px-2 py-0.5 text-[11px]">{changeFieldLabel(field)}</span>)}</div></div>}</div>}
+                {activeTab === 'decision path' && <DecisionPipeline detail={detail} />}
+                {activeTab === 'candidates' && <CandidateInspector candidates={detail.candidate_evaluations} evaluationContext={detail.evaluation_context} />}
+                {activeTab === 'retrieval' && <RetrievalSection retrievalDebug={retrievalDebug} retrievalCount={retrievalCount} />}
+                {activeTab === 'activity' && <div className="space-y-5"><AgentActivitySection activities={detail.agent_activity} /><TimelineSection events={detail.resolution_timeline} />{!detail.agent_activity.length && !detail.resolution_timeline.length && <EmptyState title="No activity captured" />}</div>}
+                {activeTab === 'raw data' && <div className="grid gap-5 xl:grid-cols-2"><div><h3 className="mb-2 font-semibold">Original source snapshot</h3><JsonHighlight className="json-body json-body--embedded" data={rawSource} /></div><div><h3 className="mb-2 font-semibold">Current written-back source</h3><JsonHighlight className="json-body json-body--embedded" data={currentSource} /></div></div>}
+              </div>
+            </div>
+          ) : null}
+        </WorkspacePanel>
+      </div>
+    </PageContainer>
+  );
+}
+
+void LegacyExplorerPage;

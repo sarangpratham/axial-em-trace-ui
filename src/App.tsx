@@ -2,6 +2,8 @@ import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext.tsx';
 import { ProtectedRoute } from './components/ProtectedRoute.tsx';
+import { AppShell, type WorkspaceView } from './components/workbench/AppShell';
+import { LoadingState } from './components/workbench/layout';
 import { useTraceExplorerState } from './hooks/useTraceExplorerState';
 import { resolveHomePath } from './lib/authRouting.ts';
 
@@ -24,15 +26,8 @@ const NotFoundPage = lazy(async () => ({
   default: (await import('./pages/NotFoundPage')).NotFoundPage,
 }));
 
-type WorkspaceView = 'explorer' | 'issues' | 'review' | 'cost';
-
 function WorkspaceLoading() {
-  return (
-    <div className="loading-state">
-      <div className="loading-spinner" />
-      loading workspace…
-    </div>
-  );
+  return <div className="grid min-h-dvh place-items-center bg-background"><LoadingState label="Loading workspace" /></div>;
 }
 
 function HomeRedirect() {
@@ -51,19 +46,24 @@ function HomeRedirect() {
 
 function WorkspaceRoute({ view }: { view: WorkspaceView }) {
   const explorer = useTraceExplorerState();
-
+  let page;
   switch (view) {
     case 'explorer':
-      return <ExplorerPage explorer={explorer} />;
+      page = <ExplorerPage explorer={explorer} />;
+      break;
     case 'issues':
-      return <IssuesPage explorer={explorer} />;
+      page = <IssuesPage explorer={explorer} />;
+      break;
     case 'review':
-      return <ReviewPage explorer={explorer} />;
+      page = <ReviewPage explorer={explorer} />;
+      break;
     case 'cost':
-      return <CostPage explorer={explorer} />;
+      page = <CostPage explorer={explorer} />;
+      break;
     default:
-      return null;
+      page = null;
   }
+  return <AppShell currentView={view} explorer={explorer}>{page}</AppShell>;
 }
 
 export default function App() {

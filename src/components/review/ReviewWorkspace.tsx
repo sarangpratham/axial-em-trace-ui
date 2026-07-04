@@ -4,6 +4,7 @@ import type { UseMutationResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { JsonHighlight } from '../JsonHighlight';
 import { StatusBadge } from '../StatusBadge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import type { TraceExplorerState } from '../../hooks/useTraceExplorerState';
 import { getMasterEntity, searchMasterEntities } from '../../lib/insightsApi';
 import { getTraceDetail } from '../../lib/api';
@@ -346,6 +347,16 @@ function candidateReviewBullets(candidate: CandidateEvaluation) {
   return bullets.slice(0, 3);
 }
 
+function candidateEvaluationTone(candidate: CandidateEvaluation) {
+  if (candidate.evaluation_status === 'deterministic_accept' || candidate.evaluation_status === 'agent_accept') {
+    return 'positive';
+  }
+  if (candidate.evaluation_status === 'deterministic_reject' || candidate.evaluation_status === 'agent_reject') {
+    return 'danger';
+  }
+  return 'warning';
+}
+
 function isAgentRelatedCandidateStatus(status?: string | null) {
   return status === 'agent_accept'
     || status === 'agent_reject'
@@ -458,6 +469,7 @@ export function ReviewWorkspace({
   publishBatch,
   publishBatchError,
   isPublishTracking,
+  hasUnsavedChanges,
   onSourceRecordSelected,
 }: {
   explorer: TraceExplorerState;
@@ -493,6 +505,7 @@ export function ReviewWorkspace({
   publishBatch: ReviewPublishBatch | null;
   publishBatchError: string | null;
   isPublishTracking: boolean;
+  hasUnsavedChanges: boolean;
   onSourceRecordSelected?: (source: ReviewCaseDetail['sources'][number]) => void;
 }) {
   const {
@@ -512,9 +525,11 @@ export function ReviewWorkspace({
   const decisionOptions = DECISION_OPTIONS;
   const [masterSearchInput, setMasterSearchInput] = useState('');
   const [showAllRecordGroups, setShowAllRecordGroups] = useState(false);
+  const [publishIntent, setPublishIntent] = useState<'reviewed' | 'selected' | null>(null);
   const deferredMasterSearch = useDeferredValue(masterSearchInput.trim());
   const requiresExistingMasterSelection = requiresTargetEntityId(decision);
   const candidateEntityIds = selectedCase?.candidate_entity_ids ?? [];
+  const confirmDiscard = () => !hasUnsavedChanges || window.confirm('Discard the unsaved decision changes for this case?');
 
   const candidateMastersQuery = useQuery({
     queryKey: ['review-case-candidate-masters', selectedCaseId, candidateEntityIds.join(',')],
@@ -714,24 +729,55 @@ export function ReviewWorkspace({
 
   const handlePublishReviewed = () => {
     if (!selectedRunId) return;
-    publishMutation.mutate({ runId: selectedRunId, caseIds: [] });
+    setPublishIntent('reviewed');
   };
 
   const handlePublishSelected = () => {
     if (!selectedRunId || selectedPublishableCaseIds.length === 0) return;
-    publishMutation.mutate({ runId: selectedRunId, caseIds: selectedPublishableCaseIds });
+    setPublishIntent('selected');
+  };
+
+  const confirmPublish = () => {
+    if (!selectedRunId || !publishIntent) return;
+    publishMutation.mutate({
+      runId: selectedRunId,
+      caseIds: publishIntent === 'selected' ? selectedPublishableCaseIds : [],
+    });
+    setPublishIntent(null);
   };
 
   const detailQuestion = buildCaseQuestion(selectedCase);
 
   return (
     <section className="review-workspace">
-      <div className="review-header">
-        <div className="review-header-copy">
-          <div className="section-title-text">Human Review Queue</div>
-          <div className="review-header-sub">
-            Save the decision first. Nothing finalizes until you publish.
-          </div>
+      <AlertDialog open={Boolean(publishIntent)} onOpenChange={(open) => { if (!open) setPublishIntent(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Publish reviewed decisions?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {publishIntent === 'selected'
+                ? `${selectedPublishableCaseIds.length} selected case${selectedPublishableCaseIds.length === 1 ? '' : 's'} will be finalized for this run.`
+                : `${publishSummary?.decided_review_case_count ?? 0} reviewed case${(publishSummary?.decided_review_case_count ?? 0) === 1 ? '' : 's'} will be submitted for publishing.`}
+              {' '}Blocked or ineligible cases will remain unchanged. This action starts the publish workflow.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmPublish}>Start publish</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <div className="review-toolbar">
+        <div className="review-tabs" role="tablist" aria-label="Review case filters">
+          {REVIEW_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              className={`review-tab${reviewTab === tab.key ? ' review-tab--active' : ''}`}
+              onClick={() => {
+                if (confirmDiscard()) setReviewTab(tab.key);
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
         <div className="review-header-actions">
           <button
@@ -796,19 +842,6 @@ export function ReviewWorkspace({
         </div>
       )}
 
-      <div className="review-tabs" role="tablist" aria-label="Review case filters">
-        {REVIEW_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            className={`review-tab${reviewTab === tab.key ? ' review-tab--active' : ''}`}
-            onClick={() => setReviewTab(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
       <div className="review-grid">
         <aside className="review-list-panel">
           <div className="review-panel-head">
@@ -829,7 +862,9 @@ export function ReviewWorkspace({
                     key={item.case_id}
                     type="button"
                     className={`review-case-row${selectedCaseId === item.case_id ? ' review-case-row--active' : ''}`}
-                    onClick={() => selectReviewCase(item.case_id)}
+                    onClick={() => {
+                      if (confirmDiscard()) selectReviewCase(item.case_id);
+                    }}
                   >
                     <div className="review-case-row-head">
                       <div>
@@ -1003,7 +1038,7 @@ export function ReviewWorkspace({
                           : 'What Still Needs Human Review'}
                       </span>
                     </div>
-                    <div className="review-reason-list">
+                    <div className="review-reason-list review-evidence-grid">
                       {selectedCase.evidence_highlights.map((item, index) => (
                         <article
                           key={`${selectedCase.case_id}-evidence-${index}`}
@@ -1033,53 +1068,41 @@ export function ReviewWorkspace({
                             {representativeTraceDetail?.candidate_evaluations.length ?? 0} candidates evaluated
                           </span>
                         </div>
-                        <div className="ctable-wrap review-candidate-table-wrap">
-                          <table className="ctable review-candidate-table">
-                            <thead>
-                              <tr>
-                                <th>Candidate</th>
-                                <th>URL</th>
-                                <th>Status</th>
-                                <th>Evidence</th>
-                                <th>History</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {topReviewCandidates.map((candidate) => (
-                                <tr key={`${candidate.candidate_entity_id}-${candidate.updated_at ?? ''}`}>
-                                  <td>
-                                    <div className="name-cell" title={candidate.candidate_entity_name || candidate.candidate_entity_id}>
-                                      {candidate.candidate_entity_name || candidate.candidate_entity_id}
-                                    </div>
-                                    <div className="entity-id-cell">{candidate.candidate_entity_id}</div>
-                                  </td>
-                                  <td>{candidate.candidate_entity_url || '—'}</td>
-                                  <td>
-                                    <div>{humanizeToken(candidate.evaluation_status)}</div>
-                                    {hasAgentDetailsForEvaluation(candidate) && (
-                                      <button
-                                        type="button"
-                                        className="review-link-button review-link-button--inline"
-                                        onClick={() => setAgentDetailsTarget(candidate)}
-                                      >
-                                        Agent details
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td>{candidateReviewBullets(candidate).join(' · ') || '—'}</td>
-                                  <td>
-                                    <button
-                                      type="button"
-                                      className="review-link-button review-link-button--inline"
-                                      onClick={() => setHistoryEntityId(candidate.candidate_entity_id)}
-                                    >
-                                      View history
+                        <div className="review-candidate-comparison-grid">
+                          {topReviewCandidates.map((candidate) => {
+                            const evidence = candidateReviewBullets(candidate);
+                            return (
+                              <article className="review-candidate-comparison-card" key={`${candidate.candidate_entity_id}-${candidate.updated_at ?? ''}`}>
+                                <div className="review-candidate-comparison-head">
+                                  <div className="min-w-0">
+                                    <div className="review-candidate-title">{candidate.candidate_entity_name || candidate.candidate_entity_id}</div>
+                                    <div className="review-candidate-id">{candidate.candidate_entity_id}</div>
+                                  </div>
+                                  <span className={`review-inline-badge ${toneClassName(candidateEvaluationTone(candidate))}`.trim()}>
+                                    {humanizeToken(candidate.evaluation_status, 'candidate')}
+                                  </span>
+                                </div>
+                                <div className="review-candidate-url">{candidate.candidate_entity_url || 'No URL recorded'}</div>
+                                <div className="review-candidate-evidence">
+                                  <div className="review-candidate-evidence-label">Why it surfaced</div>
+                                  {evidence.length > 0 ? (
+                                    <ul>{evidence.map((item) => <li key={item}>{item}</li>)}</ul>
+                                  ) : <p>No compact evidence summary was recorded.</p>}
+                                </div>
+                                <div className="review-candidate-actions">
+                                  {hasAgentDetailsForEvaluation(candidate) && (
+                                    <button type="button" className="review-link-button review-link-button--inline" onClick={() => setAgentDetailsTarget(candidate)}>Agent details</button>
+                                  )}
+                                  <button type="button" className="review-link-button review-link-button--inline" onClick={() => setHistoryEntityId(candidate.candidate_entity_id)}>View history</button>
+                                  {requiresExistingMasterSelection && !isDecisionLocked(selectedCase) && (
+                                    <button type="button" className={`review-choice-button review-link-button--inline${targetEntityId === candidate.candidate_entity_id ? ' review-choice-button--active' : ''}`} onClick={() => setTargetEntityId(candidate.candidate_entity_id)}>
+                                      {targetEntityId === candidate.candidate_entity_id ? 'Selected' : 'Choose entity'}
                                     </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                                  )}
+                                </div>
+                              </article>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1090,45 +1113,30 @@ export function ReviewWorkspace({
                           <span className="section-title-text">Possible Existing Master Entities</span>
                           <span className="section-hint">{selectedCase.candidate_summaries.length} candidates</span>
                         </div>
-                        <div className="ctable-wrap review-candidate-table-wrap">
-                          <table className="ctable review-candidate-table">
-                            <thead>
-                              <tr>
-                                <th>Entity</th>
-                                <th>URL</th>
-                                <th>Status</th>
-                                <th>Why it could match</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {selectedCase.candidate_summaries.map((candidate) => {
-                                return (
-                                  <tr key={candidate.entity_id}>
-                                    <td>
-                                      <div className="name-cell" title={candidate.entity_name || candidate.entity_id}>
-                                        {candidate.entity_name || candidate.entity_id}
-                                      </div>
-                                      <div className="entity-id-cell">{candidate.entity_id}</div>
-                                    </td>
-                                    <td>{candidate.entity_url || '—'}</td>
-                                    <td>
-                                      <div>{candidate.status_label || humanizeToken(candidate.tone, 'candidate')}</div>
-                                      {hasAgentDetailsForEvaluation(candidate) && (
-                                        <button
-                                          type="button"
-                                          className="review-link-button review-link-button--inline"
-                                          onClick={() => setAgentDetailsTarget(candidate)}
-                                        >
-                                          Agent details
-                                        </button>
-                                      )}
-                                    </td>
-                                    <td>{candidate.plausibility_points.join(' · ') || '—'}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                        <div className="review-candidate-comparison-grid">
+                          {selectedCase.candidate_summaries.map((candidate) => {
+                            const canChooseCandidate = requiresExistingMasterSelection && !candidate.is_unsafe && !isDecisionLocked(selectedCase);
+                            return (
+                              <article className="review-candidate-comparison-card" key={candidate.entity_id}>
+                                <div className="review-candidate-comparison-head">
+                                  <div className="min-w-0">
+                                    <div className="review-candidate-title">{candidate.entity_name || candidate.entity_id}</div>
+                                    <div className="review-candidate-id">{candidate.entity_id}</div>
+                                  </div>
+                                  <span className={`review-inline-badge ${toneClassName(candidate.tone)}`.trim()}>{candidate.status_label || humanizeToken(candidate.tone, 'candidate')}</span>
+                                </div>
+                                <div className="review-candidate-url">{candidate.entity_url || 'No URL recorded'}</div>
+                                <div className="review-candidate-evidence">
+                                  <div className="review-candidate-evidence-label">Why it could match</div>
+                                  {candidate.plausibility_points.length > 0 ? <ul>{candidate.plausibility_points.map((point) => <li key={point}>{point}</li>)}</ul> : <p>No compact evidence summary was recorded.</p>}
+                                </div>
+                                <div className="review-candidate-actions">
+                                  {hasAgentDetailsForEvaluation(candidate) && <button type="button" className="review-link-button review-link-button--inline" onClick={() => setAgentDetailsTarget(candidate)}>Agent details</button>}
+                                  {canChooseCandidate && <button type="button" className={`review-choice-button review-link-button--inline${targetEntityId === candidate.entity_id ? ' review-choice-button--active' : ''}`} onClick={() => setTargetEntityId(candidate.entity_id)}>{targetEntityId === candidate.entity_id ? 'Selected' : 'Choose entity'}</button>}
+                                </div>
+                              </article>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1434,11 +1442,12 @@ export function ReviewWorkspace({
 
               {historyEntityId && (
                 <div className="review-modal-backdrop" onClick={() => setHistoryEntityId('')}>
-                  <div className="review-modal" onClick={(event) => event.stopPropagation()}>
+                  <div className="review-modal review-modal--wide" role="dialog" aria-modal="true" aria-label="Master history" onClick={(event) => event.stopPropagation()}>
                     <div className="review-modal-head">
                       <div>
-                        <div className="section-title-text">Master History</div>
-                        <div className="review-field-hint">
+                        <div className="review-modal-kicker">Entity context</div>
+                        <div className="review-modal-title">Master history</div>
+                        <div className="review-modal-subtitle">
                           {masterHistoryQuery.data?.entity_name || historyEntityId}
                         </div>
                       </div>
@@ -1456,17 +1465,15 @@ export function ReviewWorkspace({
                       <div className="review-panel-empty review-panel-empty--compact">Historical context could not be loaded.</div>
                     ) : (
                       <div className="review-modal-body">
-                        <div className="review-summary-line">
-                          <span className="review-summary-label">Master</span>
-                          <span className="review-summary-value">
-                            {masterHistoryQuery.data?.entity_name || historyEntityId}
-                          </span>
-                        </div>
-                        <div className="review-summary-line">
-                          <span className="review-summary-label">URL</span>
-                          <span className="review-summary-value">
-                            {masterHistoryQuery.data?.entity_url || '—'}
-                          </span>
+                        <div className="review-modal-facts">
+                          <div className="review-modal-fact">
+                            <span>Master</span>
+                            <strong>{masterHistoryQuery.data?.entity_name || historyEntityId}</strong>
+                          </div>
+                          <div className="review-modal-fact">
+                            <span>URL</span>
+                            <strong>{masterHistoryQuery.data?.entity_url || '—'}</strong>
+                          </div>
                         </div>
                         {(masterHistoryQuery.data?.historical_transaction_context ?? []).length === 0 ? (
                           <div className="review-panel-empty review-panel-empty--compact">
@@ -1515,11 +1522,12 @@ export function ReviewWorkspace({
 
               {agentDetailsTarget && (
                 <div className="review-modal-backdrop" onClick={() => setAgentDetailsTarget(null)}>
-                  <div className="review-modal" onClick={(event) => event.stopPropagation()}>
+                  <div className="review-modal review-modal--compact" role="dialog" aria-modal="true" aria-label="Agent details" onClick={(event) => event.stopPropagation()}>
                     <div className="review-modal-head">
                       <div>
-                        <div className="section-title-text">Agent Details</div>
-                        <div className="review-field-hint">
+                        <div className="review-modal-kicker">Evaluation evidence</div>
+                        <div className="review-modal-title">Agent details</div>
+                        <div className="review-modal-subtitle">
                           {candidateDisplayName(agentDetailsTarget)}
                         </div>
                       </div>
@@ -1532,36 +1540,20 @@ export function ReviewWorkspace({
                       </button>
                     </div>
                     <div className="review-modal-body">
-                      <div className="review-summary-line">
-                        <span className="review-summary-label">Status</span>
-                        <span className="review-summary-value">
-                          {'evaluation_status' in agentDetailsTarget
-                            ? humanizeToken(agentDetailsTarget.evaluation_status, 'agent')
-                            : '—'}
-                        </span>
-                      </div>
-                      <div className="review-summary-line">
-                        <span className="review-summary-label">Agent kind</span>
-                        <span className="review-summary-value">
-                          {'agent_lane' in agentDetailsTarget
-                            ? humanizeToken(agentDetailsTarget.agent_lane, 'unknown')
-                            : 'unknown'}
-                        </span>
-                      </div>
-                      {'agent_decision' in agentDetailsTarget && agentDetailsTarget.agent_decision && (
-                        <div className="review-summary-line">
-                          <span className="review-summary-label">Agent decision</span>
-                          <span className="review-summary-value">{humanizeToken(agentDetailsTarget.agent_decision)}</span>
+                      <div className="review-modal-facts">
+                        <div className="review-modal-fact">
+                          <span>Status</span>
+                          <strong>{'evaluation_status' in agentDetailsTarget ? humanizeToken(agentDetailsTarget.evaluation_status, 'agent') : '—'}</strong>
                         </div>
-                      )}
-                      {'agent_confidence' in agentDetailsTarget && agentDetailsTarget.agent_confidence && (
-                        <div className="review-summary-line">
-                          <span className="review-summary-label">Confidence</span>
-                          <span className="review-summary-value">{humanizeToken(agentDetailsTarget.agent_confidence)}</span>
+                        <div className="review-modal-fact">
+                          <span>Agent kind</span>
+                          <strong>{'agent_lane' in agentDetailsTarget ? humanizeToken(agentDetailsTarget.agent_lane, 'unknown') : 'Unknown'}</strong>
                         </div>
-                      )}
+                        {'agent_decision' in agentDetailsTarget && agentDetailsTarget.agent_decision && <div className="review-modal-fact"><span>Decision</span><strong>{humanizeToken(agentDetailsTarget.agent_decision)}</strong></div>}
+                        {'agent_confidence' in agentDetailsTarget && agentDetailsTarget.agent_confidence && <div className="review-modal-fact"><span>Confidence</span><strong>{humanizeToken(agentDetailsTarget.agent_confidence)}</strong></div>}
+                      </div>
                       {'agent_reason' in agentDetailsTarget && agentDetailsTarget.agent_reason && (
-                        <div className="review-summary-note">{agentDetailsTarget.agent_reason}</div>
+                        <div className="review-agent-reason"><span>Agent rationale</span><p>{agentDetailsTarget.agent_reason}</p></div>
                       )}
                       {'evaluation_payload' in agentDetailsTarget && agentDetailsTarget.evaluation_payload && Object.keys(agentDetailsTarget.evaluation_payload).length > 0 ? (
                         <details className="review-collapsible" open>

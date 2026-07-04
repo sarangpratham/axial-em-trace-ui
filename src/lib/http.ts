@@ -1,7 +1,7 @@
 const runtimeEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 
 export const INSIGHTS_API_BASE_URL =
-  runtimeEnv.VITE_INSIGHTS_API_BASE_URL || 'http://localhost:5003/api/v1';
+  runtimeEnv.VITE_INSIGHTS_API_BASE_URL || '/api/v1';
 
 export const REVIEW_API_BASE_URL =
   runtimeEnv.VITE_REVIEW_API_BASE_URL
