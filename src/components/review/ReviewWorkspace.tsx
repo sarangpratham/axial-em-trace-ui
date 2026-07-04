@@ -1029,8 +1029,8 @@ export function ReviewWorkspace({
                                 </div>
                               )}
                               {transactionParticipants.length > 0 && (
-                                <div className="ctable-wrap review-candidate-table-wrap">
-                                  <table className="ctable review-candidate-table">
+                                <div className="ctable-wrap data-table-shell review-candidate-table-wrap review-transaction-table">
+                                  <table className="ctable data-table review-candidate-table">
                                     <thead>
                                       <tr>
                                         <th>Entity</th>
@@ -1540,8 +1540,8 @@ export function ReviewWorkspace({
                                 {group.transaction_id} · {group.participant_count} participants · run {group.run_id}
                               </summary>
                               <div className="review-summary-context">
-                                <div className="ctable-wrap review-candidate-table-wrap">
-                                  <table className="ctable review-candidate-table">
+                                <div className="ctable-wrap data-table-shell review-candidate-table-wrap review-transaction-table">
+                                  <table className="ctable data-table review-candidate-table">
                                     <thead>
                                       <tr>
                                         <th>Entity</th>

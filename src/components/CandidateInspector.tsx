@@ -107,8 +107,8 @@ export function CandidateInspector({ candidates, evaluationContext }: Props) {
 
   return (
     <div className="candidate-wrap">
-      <div className="ctable-wrap" ref={tableWrapRef} style={{ maxHeight: 'var(--evidence-height)', overflowY: 'auto' }}>
-        <table className="ctable">
+      <div className="ctable-wrap data-table-shell" ref={tableWrapRef} style={{ maxHeight: 'var(--evidence-height)', overflowY: 'auto' }}>
+        <table className="ctable data-table">
           <thead>
             <tr>
               <th>#</th>

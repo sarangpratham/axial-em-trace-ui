@@ -18,8 +18,8 @@ export function IssueList({ issues }: Props) {
   }
 
   return (
-    <div className="anomaly-list">
-      <table className="anomaly-table">
+    <div className="anomaly-list data-table-shell">
+      <table className="anomaly-table data-table">
         <thead>
           <tr>
             <th>Severity</th>

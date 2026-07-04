@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { getRunSummary, getRuns, getTraceDetail, getTraces } from '../lib/api';
 import {
@@ -29,6 +29,13 @@ const SESSION_KEYS = {
   reviewTab: 'decision-tracer:review-tab',
   selectedReviewCaseId: 'decision-tracer:selected-review-case-id',
 } as const;
+
+const SOURCE_PAGE_SIZE = 50;
+
+function positivePage(value: string | null) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
 
 function readSessionString(key: string, fallback = '') {
   if (typeof window === 'undefined') return fallback;
@@ -119,6 +126,7 @@ export function useTraceExplorerState() {
     SESSION_KEYS.selectedReviewCaseId,
     params.get('review_case_id') ?? '',
   );
+  const [sourcePage, setSourcePageState] = useState(() => positivePage(params.get('source_page')));
 
   const runsQuery = useQuery({
     queryKey: ['runs'],
@@ -165,8 +173,9 @@ export function useTraceExplorerState() {
       deferredSearch,
       issuePresenceFilter,
       issueTypeFilter,
+      sourcePage,
     ],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       getTraces({
         runId: selectedRunId,
         module: moduleFilter || undefined,
@@ -180,10 +189,14 @@ export function useTraceExplorerState() {
               ? false
               : undefined,
         issueType: issueTypeFilter || undefined,
+        limit: SOURCE_PAGE_SIZE,
+        offset: (sourcePage - 1) * SOURCE_PAGE_SIZE,
+        signal,
       }),
     enabled: Boolean(selectedRunId && isExplorerRoute),
     staleTime: 20_000,
     gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
   });
 
   const availableIssueTypes = useMemo(() => {
@@ -210,47 +223,29 @@ export function useTraceExplorerState() {
   }, [setStatusFilter, statusFilter]);
 
   const selectedTrace = useMemo(() => {
-    return (
-      tracesQuery.data?.find(
-        (trace) =>
-          trace.source_module === selectedModule &&
-          trace.source_unique_id === selectedUniqueId,
-      ) ?? tracesQuery.data?.[0]
+    return tracesQuery.data?.items.find(
+      (trace) =>
+        trace.source_module === selectedModule &&
+        trace.source_unique_id === selectedUniqueId,
     );
   }, [selectedModule, selectedUniqueId, tracesQuery.data]);
-
-  useEffect(() => {
-    if (!selectedTrace) return;
-    if (
-      selectedTrace.source_module === selectedModule &&
-      selectedTrace.source_unique_id === selectedUniqueId
-    ) {
-      return;
-    }
-    setSelectedModule(selectedTrace.source_module);
-    setSelectedUniqueId(selectedTrace.source_unique_id);
-  }, [
-    selectedModule,
-    selectedTrace,
-    selectedUniqueId,
-    setSelectedModule,
-    setSelectedUniqueId,
-  ]);
 
   const detailQuery = useQuery({
     queryKey: [
       'trace-detail',
       selectedRunId,
-      selectedTrace?.source_module,
-      selectedTrace?.source_unique_id,
+      selectedModule,
+      selectedUniqueId,
     ],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       getTraceDetail(
         selectedRunId,
-        selectedTrace!.source_module,
-        selectedTrace!.source_unique_id,
+        selectedModule,
+        selectedUniqueId,
+        undefined,
+        signal,
       ),
-    enabled: Boolean(selectedRunId && selectedTrace && isExplorerRoute),
+    enabled: Boolean(selectedRunId && selectedModule && selectedUniqueId && isExplorerRoute),
     staleTime: 60_000,
     gcTime: 10 * 60_000,
   });
@@ -316,7 +311,7 @@ export function useTraceExplorerState() {
     gcTime: 5 * 60_000,
   });
 
-  const traces = tracesQuery.data ?? [];
+  const traces = tracesQuery.data?.items ?? [];
   const summary = summaryQuery.data;
   const detail = detailQuery.data;
   const reviewCases = reviewCasesQuery.data ?? [];
@@ -327,8 +322,8 @@ export function useTraceExplorerState() {
   const isMatch = isAssignedExistingMaster(detail?.resolution_status);
   const isNew = isCreatedNewMaster(detail?.resolution_status);
 
-  const selectedTraceKey = selectedTrace
-    ? `${selectedTrace.source_module}::${selectedTrace.source_unique_id}`
+  const selectedTraceKey = selectedModule && selectedUniqueId
+    ? `${selectedModule}::${selectedUniqueId}`
     : undefined;
 
   const writeParams = (updates: Record<string, string>) => {
@@ -343,7 +338,8 @@ export function useTraceExplorerState() {
   };
 
   const updateParam = (key: string, value: string) => {
-    writeParams({ [key]: value });
+    writeParams({ [key]: value, source_page: key === 'run_id' ? '' : '1' });
+    setSourcePageState(1);
     switch (key) {
       case 'run_id':
         setSelectedRunId(value);
@@ -368,18 +364,21 @@ export function useTraceExplorerState() {
 
   const setSearchInput = (value: string) => {
     setSearchInputState(value);
-    writeParams({ q: value });
+    setSourcePageState(1);
+    writeParams({ q: value, source_page: '' });
   };
 
   const setIssuePresenceFilter = (value: 'all' | 'with' | 'clean') => {
     setIssuePresenceFilterState(value);
-    writeParams({ has_issues: value === 'all' ? '' : String(value === 'with'), issue_type: value === 'clean' ? '' : issueTypeFilter });
+    setSourcePageState(1);
+    writeParams({ has_issues: value === 'all' ? '' : String(value === 'with'), issue_type: value === 'clean' ? '' : issueTypeFilter, source_page: '' });
     if (value === 'clean') setIssueTypeFilterState('');
   };
 
   const setIssueTypeFilter = (value: string) => {
     setIssueTypeFilterState(value);
-    writeParams({ issue_type: value, has_issues: value ? 'true' : issuePresenceFilter === 'all' ? '' : String(issuePresenceFilter === 'with') });
+    setSourcePageState(1);
+    writeParams({ issue_type: value, has_issues: value ? 'true' : issuePresenceFilter === 'all' ? '' : String(issuePresenceFilter === 'with'), source_page: '' });
     if (value) {
       setIssuePresenceFilterState('with');
     }
@@ -397,6 +396,12 @@ export function useTraceExplorerState() {
     setSelectedModule(sourceModule);
     setSelectedUniqueId(sourceUniqueId);
     writeParams({ selected_module: sourceModule, selected_unique_id: sourceUniqueId });
+  };
+
+  const setSourcePage = (page: number) => {
+    const nextPage = Math.max(1, page);
+    setSourcePageState(nextPage);
+    writeParams({ source_page: nextPage === 1 ? '' : String(nextPage) });
   };
 
   const setReviewTab = (value: string) => {
@@ -447,6 +452,10 @@ export function useTraceExplorerState() {
     isMatch,
     isNew,
     selectedTraceKey,
+    sourcePage,
+    sourcePageSize: SOURCE_PAGE_SIZE,
+    hasNextSourcePage: tracesQuery.data?.hasMore ?? false,
+    setSourcePage,
     updateParam,
     setIssuePresenceFilter,
     setIssueTypeFilter,

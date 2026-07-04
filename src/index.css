@@ -648,12 +648,75 @@ textarea {
   font-size: 11px;
 }
 
-.compact-data-table th {
-  height: 34px;
+.data-table-shell {
+  min-width: 0;
+  overflow: auto;
+  border: 1px solid var(--border-new);
+  border-radius: 9px;
+  background: var(--card);
 }
 
+.data-table,
+.compact-data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  font-size: 12px;
+}
+
+.data-table th,
+.compact-data-table th {
+  height: 34px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-new);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  white-space: nowrap;
+}
+
+.data-table td,
 .compact-data-table tbody td {
-  line-height: 1.35;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-new);
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td,
+.compact-data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table tbody tr,
+.compact-data-table tbody tr {
+  transition: background-color 120ms ease;
+}
+
+.data-table tbody tr:hover,
+.compact-data-table tbody tr:hover {
+  background: var(--accent);
+}
+
+.review-page-shell--v2 .review-summary-context {
+  gap: 9px;
+  padding: 10px 11px 11px;
+}
+
+.review-page-shell--v2 .review-transaction-table {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.review-page-shell--v2 .review-transaction-table td:nth-child(4) {
+  max-width: 260px;
+  overflow-wrap: anywhere;
 }
 
 .review-page-shell--v2 .review-modal-backdrop {

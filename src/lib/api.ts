@@ -23,8 +23,8 @@ type InsightsRunListItem = {
   run_id: string;
 };
 
-async function request<T>(path: string): Promise<T> {
-  return requestApiJson<T>(INSIGHTS_API_BASE_URL, path);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return requestApiJson<T>(INSIGHTS_API_BASE_URL, path, init);
 }
 
 export async function getRuns() {
@@ -78,8 +78,15 @@ export async function getTraces(params: {
   hasIssues?: boolean;
   issueType?: string;
   inputScope?: string;
+  limit?: number;
+  offset?: number;
+  signal?: AbortSignal;
 }) {
-  const search = new URLSearchParams({ limit: '500', offset: '0' });
+  const limit = Math.max(1, params.limit ?? 50);
+  const search = new URLSearchParams({
+    limit: String(limit + 1),
+    offset: String(Math.max(0, params.offset ?? 0)),
+  });
   if (params.inputScope) search.set('input_scope', params.inputScope);
   if (params.module) search.set('module', params.module);
   if (params.resolutionStatus) search.set('resolution_status', params.resolutionStatus);
@@ -87,19 +94,24 @@ export async function getTraces(params: {
   if (params.query?.trim()) search.set('query', params.query.trim());
   if (params.hasIssues != null) search.set('has_issues', String(params.hasIssues));
 
-  const records = await request<Array<Record<string, unknown>>>(
-    `/runs/${encodeURIComponent(params.runId)}/sources?${search.toString()}`,
-  );
-  const issueIndex =
+  const [records, issues] = await Promise.all([
+    request<Array<Record<string, unknown>>>(
+      `/runs/${encodeURIComponent(params.runId)}/sources?${search.toString()}`,
+      { signal: params.signal },
+    ),
     params.issueType
-      ? buildIssueIndex(
-          await request<IssueRecord[]>(
-            `/runs/${encodeURIComponent(params.runId)}/issues?limit=5000`,
-          ),
+      ? request<IssueRecord[]>(
+          `/runs/${encodeURIComponent(params.runId)}/issues?limit=5000`,
+          { signal: params.signal },
         )
-      : new Map<string, IssueRecord[]>();
+      : Promise.resolve([]),
+  ]);
+  const hasMore = records.length > limit;
+  const issueIndex = params.issueType
+    ? buildIssueIndex(issues)
+    : new Map<string, IssueRecord[]>();
 
-  let traces = records.map((record) =>
+  let traces = records.slice(0, limit).map((record) =>
     mapSourceRecordListItem(record, issueIndex.get(String(record.source_trace_id || ''))),
   );
 
@@ -107,7 +119,7 @@ export async function getTraces(params: {
     traces = traces.filter((trace) => trace.issue_types.includes(params.issueType || ''));
   }
 
-  return traces;
+  return { items: traces, hasMore };
 }
 
 export async function getTraceDetail(
@@ -115,12 +127,14 @@ export async function getTraceDetail(
   sourceModule: string,
   sourceUniqueId: string,
   inputScope?: string,
+  signal?: AbortSignal,
 ): Promise<TraceDetail> {
   const search = new URLSearchParams();
   if (inputScope) search.set('input_scope', inputScope);
   const suffix = search.size ? `?${search.toString()}` : '';
   const detail = await request<SourceRecordDetail>(
     `/runs/${encodeURIComponent(runId)}/sources/${encodeURIComponent(sourceModule)}/${encodeURIComponent(sourceUniqueId)}${suffix}`,
+    { signal },
   );
   return mapSourceRecordDetail(detail);
 }
