@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { animate, stagger, utils } from 'animejs';
 import type { TraceDetail } from '../types';
 import {
   humanizeToken,
@@ -8,6 +9,7 @@ import {
   sourceResolutionLabel,
 } from '../lib/sourceResolution';
 import { IssueList } from './IssueList';
+import { createMotionScope, MOTION, motionDistance, motionDuration } from '../motion/anime';
 
 type Props = {
   detail: TraceDetail;
@@ -36,6 +38,7 @@ function DrawerRow({ label, value, mono }: { label: string; value: string | null
 
 export function DecisionPipeline({ detail }: Props) {
   const [openStageIdx, setOpenStageIdx] = useState<number | null>(null);
+  const motionRoot = useRef<HTMLDivElement>(null);
 
   const enr = detail.derived_enrichment as Record<string, unknown> | null | undefined;
   const retrievalSummary = detail.retrieval_summary as Record<string, unknown> | null | undefined;
@@ -207,6 +210,39 @@ export function DecisionPipeline({ detail }: Props) {
     setOpenStageIdx((prev) => (prev === idx ? null : idx));
   }
 
+  useEffect(() => {
+    if (!motionRoot.current) return undefined;
+    const scope = createMotionScope(motionRoot).add((self) => {
+      if (!self) return;
+      const cards = utils.$('.stage-card');
+      const connectors = utils.$('.pipeline-connector');
+      animate(cards, {
+        y: { from: motionDistance(self, 8) },
+        scale: { from: self.matches.reduceMotion ? 1 : 0.985 },
+        duration: motionDuration(self, MOTION.reveal),
+        delay: self.matches.reduceMotion ? 0 : stagger(34),
+      });
+      animate(connectors, {
+        scaleX: { from: self.matches.reduceMotion ? 1 : 0 },
+        duration: motionDuration(self, MOTION.interface),
+        delay: self.matches.reduceMotion ? 0 : stagger(34, { start: 80 }),
+      });
+    });
+    return () => scope.revert();
+  }, [detail.source_trace_id]);
+
+  useEffect(() => {
+    if (openStageIdx === null || !motionRoot.current) return undefined;
+    const scope = createMotionScope(motionRoot).add((self) => {
+      if (!self) return;
+      animate('.pipeline-drawer', {
+        y: { from: motionDistance(self, -6) },
+        duration: motionDuration(self, MOTION.interface),
+      });
+    });
+    return () => scope.revert();
+  }, [openStageIdx]);
+
   const indicatorClass = (s: StageStatus) => {
     const map: Record<StageStatus, string> = {
       ok: 'stage-indicator--ok',
@@ -219,7 +255,7 @@ export function DecisionPipeline({ detail }: Props) {
   };
 
   return (
-    <div className="pipeline-wrap">
+    <div ref={motionRoot} className="pipeline-wrap">
       <div className="pipeline">
         {stages.map((stage, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'stretch', flex: 1, minWidth: 0 }}>

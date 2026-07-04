@@ -1,7 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { UseMutationResult } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
+import { animate, stagger, utils } from 'animejs';
 import { JsonHighlight } from '../JsonHighlight';
 import { StatusBadge } from '../StatusBadge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
@@ -9,6 +10,7 @@ import type { TraceExplorerState } from '../../hooks/useTraceExplorerState';
 import { getMasterEntity, searchMasterEntities } from '../../lib/insightsApi';
 import { getTraceDetail } from '../../lib/api';
 import { humanizeToken } from '../../lib/sourceResolution';
+import { createMotionScope, MOTION, motionDistance, motionDuration } from '../../motion/anime';
 import type {
   CandidateEvaluation,
   MasterSearchResult,
@@ -522,6 +524,7 @@ export function ReviewWorkspace({
 
   const selectedCase = reviewCaseDetail;
   const selectedCaseId = selectedCase?.case_id ?? '';
+  const motionRoot = useRef<HTMLElement>(null);
   const decisionOptions = DECISION_OPTIONS;
   const [masterSearchInput, setMasterSearchInput] = useState('');
   const [showAllRecordGroups, setShowAllRecordGroups] = useState(false);
@@ -680,6 +683,57 @@ export function ReviewWorkspace({
     gcTime: 5 * 60_000,
   });
 
+  useEffect(() => {
+    if (!selectedCaseId || !motionRoot.current) return undefined;
+    const scope = createMotionScope(motionRoot).add((self) => {
+      if (!self) return;
+      const sections = [
+        ...utils.$('.review-detail-head'),
+        ...utils.$('.review-detail-body > *').slice(0, 7),
+      ];
+      animate(sections, {
+        x: { from: motionDistance(self, 7) },
+        duration: motionDuration(self, MOTION.reveal),
+        delay: self.matches.reduceMotion ? 0 : stagger(30),
+      });
+    });
+    return () => scope.revert();
+  }, [selectedCaseId]);
+
+  useEffect(() => {
+    if ((!historyEntityId && !agentDetailsTarget) || !motionRoot.current) return undefined;
+    const scope = createMotionScope(motionRoot).add((self) => {
+      if (!self) return;
+      animate('.review-modal-backdrop', {
+        scale: { from: self.matches.reduceMotion ? 1 : 0.998 },
+        duration: motionDuration(self, MOTION.interface),
+      });
+      animate('.review-modal', {
+        y: { from: motionDistance(self, 10) },
+        scale: { from: self.matches.reduceMotion ? 1 : 0.985 },
+        duration: motionDuration(self, MOTION.reveal),
+      });
+      animate('.review-modal-fact', {
+        y: { from: motionDistance(self, 5) },
+        duration: motionDuration(self, MOTION.interface),
+        delay: self.matches.reduceMotion ? 0 : stagger(28, { start: 70 }),
+      });
+    });
+    return () => scope.revert();
+  }, [agentDetailsTarget, historyEntityId]);
+
+  useEffect(() => {
+    if (!saveDecisionMutation.isSuccess || !motionRoot.current) return undefined;
+    const scope = createMotionScope(motionRoot).add((self) => {
+      if (!self) return;
+      animate('.review-callout--success', {
+        y: { from: motionDistance(self, -6) },
+        duration: motionDuration(self, MOTION.interface),
+      });
+    });
+    return () => scope.revert();
+  }, [saveDecisionMutation.isSuccess]);
+
   const toggleCaseSelection = (caseId: string) => {
     setSelectedCaseIds((current) =>
       current.includes(caseId)
@@ -749,7 +803,7 @@ export function ReviewWorkspace({
   const detailQuestion = buildCaseQuestion(selectedCase);
 
   return (
-    <section className="review-workspace">
+    <section ref={motionRoot} className="review-workspace">
       <AlertDialog open={Boolean(publishIntent)} onOpenChange={(open) => { if (!open) setPublishIntent(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -1,6 +1,7 @@
-import { useEffect, useState, type FocusEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import * as Dialog from '@radix-ui/react-dialog';
+import { animate } from 'animejs';
 import {
   AlertTriangle,
   CircleDollarSign,
@@ -21,6 +22,8 @@ import type { TraceExplorerState } from '@/hooks/useTraceExplorerState';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/theme';
 import { RunSelector } from './RunSelector';
+import { RouteMotion } from './RouteMotion';
+import { createMotionScope, MOTION, motionDistance, motionDuration } from '@/motion/anime';
 
 export type WorkspaceView = 'explorer' | 'issues' | 'review' | 'cost';
 
@@ -74,6 +77,7 @@ export function AppShell({ currentView, explorer, children }: { currentView: Wor
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const navigationMotionRoot = useRef<HTMLElement>(null);
   const expanded = railHovered || railFocused || railPinned;
   const copy = VIEW_COPY[currentView];
 
@@ -92,6 +96,19 @@ export function AppShell({ currentView, explorer, children }: { currentView: Wor
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
+
+  useEffect(() => {
+    if (!navigationMotionRoot.current) return undefined;
+    const scope = createMotionScope(navigationMotionRoot).add((self) => {
+      if (!self) return;
+      animate('[aria-current="page"]', {
+        scale: { from: self.matches.reduceMotion ? 1 : 0.975 },
+        x: { from: motionDistance(self, -3) },
+        duration: motionDuration(self, MOTION.interface),
+      });
+    });
+    return () => scope.revert();
+  }, [currentView]);
 
   function closeRailAfterNavigation() {
     setRailFocused(false);
@@ -144,6 +161,7 @@ export function AppShell({ currentView, explorer, children }: { currentView: Wor
     <div className="flex h-dvh min-h-0 overflow-hidden bg-background text-foreground">
       <div className="relative hidden w-[72px] shrink-0 md:block">
         <aside
+          ref={navigationMotionRoot}
           className={cn('absolute inset-y-0 left-0 z-40 flex flex-col overflow-hidden border-r border-border bg-card shadow-sm transition-[width] duration-200 ease-[cubic-bezier(.22,1,.36,1)] will-change-[width]', expanded ? 'w-[248px] shadow-xl' : 'w-[72px]')}
           onMouseEnter={() => setRailHovered(true)}
           onMouseLeave={() => setRailHovered(false)}
@@ -173,7 +191,7 @@ export function AppShell({ currentView, explorer, children }: { currentView: Wor
           </div>
         </header>
         <div className="border-b border-border bg-card px-4 py-2 lg:hidden"><RunSelector runs={explorer.runsQuery.data ?? []} value={explorer.selectedRunId} onChange={(runId) => explorer.updateParam('run_id', runId)} compact /></div>
-        <main className="min-h-0 flex-1 overflow-auto">{children}</main>
+        <main className="min-h-0 flex-1 overflow-auto"><RouteMotion routeKey={currentView}>{children}</RouteMotion></main>
       </div>
 
       <Dialog.Root open={commandOpen} onOpenChange={setCommandOpen}>

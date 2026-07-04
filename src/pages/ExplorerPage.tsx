@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { animate, stagger, utils } from 'animejs';
 import { AlertTriangle, Bot, ChevronRight, Database, FilterX, Hexagon, RefreshCcw, Route, Search, Sparkles, Trophy } from 'lucide-react';
 import { CandidateInspector } from '../components/CandidateInspector';
 import { DecisionPipeline } from '../components/DecisionPipeline';
@@ -10,6 +11,7 @@ import { EmptyState, ErrorState, FilterBar, FilterField, LoadingState, MetricCar
 import type { TraceExplorerState } from '../hooks/useTraceExplorerState';
 import type { AgentActivityRecord, ResolutionTimelineEvent } from '../types';
 import { humanizeToken, sourceResolutionLabel } from '../lib/sourceResolution';
+import { createMotionScope, MOTION, motionDistance, motionDuration } from '../motion/anime';
 
 const MODULE_OPTIONS = ['news', 'linkedin', 'portfolio'];
 const ISSUE_PRESENCE_OPTIONS = [
@@ -726,6 +728,7 @@ const explorerControlClass = 'h-9 rounded-lg border border-input bg-background p
 
 export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
   const [activeTab, setActiveTab] = useState<(typeof EXPLORER_TABS)[number]>('overview');
+  const detailMotionRoot = useRef<HTMLDivElement>(null);
   const {
     detail, detailQuery, isMatch, isNew, selectedTrace, selectedTraceKey, selectTrace,
     traces, tracesQuery, searchInput, setSearchInput, moduleFilter, statusFilter,
@@ -745,6 +748,20 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
     setSearchInput(''); updateParam('module', ''); updateParam('resolution_status', '');
     updateParam('decision_source', ''); setIssuePresenceFilter('all'); setIssueTypeFilter('');
   };
+
+  useEffect(() => {
+    if (!detail || !detailMotionRoot.current) return undefined;
+    const scope = createMotionScope(detailMotionRoot).add((self) => {
+      if (!self) return;
+      const sections = utils.$('.explorer-detail-motion > *');
+      animate(sections, {
+        x: { from: motionDistance(self, 7) },
+        duration: motionDuration(self, MOTION.reveal),
+        delay: self.matches.reduceMotion ? 0 : stagger(28),
+      });
+    });
+    return () => scope.revert();
+  }, [detail?.source_module, detail?.source_unique_id]);
 
   return (
     <PageContainer className="max-w-none xl:max-w-[1600px]">
@@ -769,7 +786,7 @@ export function ExplorerPage({ explorer }: { explorer: TraceExplorerState }) {
 
         <WorkspacePanel className="h-full min-h-0 overflow-hidden">
           {!selectedTrace ? <EmptyState title="Choose a source record" description="Its identity, outcome, decision path, candidates, and raw evidence will appear here." /> : detailQuery.isLoading ? <LoadingState label="Loading decision evidence" /> : detailQuery.isError ? <ErrorState message="The selected source detail could not be loaded." onRetry={() => void detailQuery.refetch()} /> : detail ? (
-            <div className="flex h-full min-h-0 flex-col" key={`${detail.source_module}:${detail.source_unique_id}`}>
+            <div ref={detailMotionRoot} className="explorer-detail-motion flex h-full min-h-0 flex-col" key={`${detail.source_module}:${detail.source_unique_id}`}>
               <div className="shrink-0 border-b border-border p-3.5"><div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between"><div className="min-w-0"><div className="font-mono text-[10px] text-muted-foreground">{detail.source_module} · {detail.source_unique_id}</div><h2 className="mt-1 text-lg font-semibold tracking-[-0.025em]">{detail.source_entity_name || 'Unnamed source entity'}</h2><p className="mt-1 line-clamp-2 max-w-3xl text-xs leading-5 text-muted-foreground">{detail.decision_story}</p></div><div className="flex flex-wrap gap-1.5"><StatusBadge label={detail.resolution_status} />{detail.decision_source && <StatusBadge label={detail.decision_source} />}</div></div><div className="mt-2.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Candidates" value={detail.candidate_count} /><MetricCard label="Viable" value={detail.viable_candidate_count} tone="success" /><MetricCard label="Retrieved" value={retrievalCount} /><MetricCard label="Issue signals" value={detail.issue_count ?? 0} tone={detail.issue_count ? 'warning' : 'neutral'} /></div></div>
               <div className="shrink-0 overflow-x-auto border-b border-border px-3"><div className="flex min-w-max gap-0.5">{EXPLORER_TABS.map((tab) => <button key={tab} type="button" className={`border-b-2 px-2.5 py-2.5 text-xs capitalize transition-colors ${activeTab === tab ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div></div>
               <div className="explorer-tab-panel min-h-0 flex-1 overflow-y-auto p-3">

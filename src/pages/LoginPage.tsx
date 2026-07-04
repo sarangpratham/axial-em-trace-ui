@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Check, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { animate, stagger, utils } from 'animejs';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { LoadingState } from '@/components/workbench/layout';
 import { resolvePostLoginPath } from '@/lib/authRouting';
 import { isApiErrorStatus } from '@/lib/http';
+import { createMotionScope, MOTION, motionDistance, motionDuration } from '@/motion/anime';
 import ditherArtwork from '@/assets/dither-orbit.jpg';
 
 type LoginLocationState = { from?: string };
@@ -21,7 +23,58 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const motionRoot = useRef<HTMLElement>(null);
   const destination = resolvePostLoginPath((location.state as LoginLocationState | null)?.from);
+
+  useEffect(() => {
+    if (status !== 'unauthenticated' || !motionRoot.current) return undefined;
+    const scope = createMotionScope(motionRoot).add((self) => {
+      if (!self) return;
+      const duration = motionDuration(self, MOTION.hero);
+      const shortDuration = motionDuration(self, MOTION.reveal);
+
+      animate('.login-access-card', {
+        x: { from: motionDistance(self, 16) },
+        scale: { from: self.matches.reduceMotion ? 1 : 0.985 },
+        duration,
+        delay: self.matches.reduceMotion ? 0 : 120,
+      });
+
+      if (self.matches.smallScreen) return;
+      animate('.login-dither-art', { opacity: { from: 0 }, duration });
+      animate('.login-visual-brand', {
+        y: { from: motionDistance(self, -8) },
+        duration: shortDuration,
+        delay: self.matches.reduceMotion ? 0 : 80,
+      });
+      animate('.login-motion-line', {
+        y: { from: motionDistance(self, 18) },
+        duration,
+        delay: self.matches.reduceMotion ? 0 : stagger(75, { start: 130 }),
+      });
+      animate('.login-motion-support', {
+        y: { from: motionDistance(self, 10) },
+        duration: shortDuration,
+        delay: self.matches.reduceMotion ? 0 : stagger(45, { start: 320 }),
+      });
+
+      if (!self.matches.reduceMotion) {
+        const [art] = utils.$('.login-dither-art');
+        if (art) {
+          animate(art, {
+            x: [-4, 4],
+            y: [-3, 3],
+            scale: [1.035, 1.015],
+            duration: 15_000,
+            ease: 'inOutSine',
+            alternate: true,
+            loop: true,
+          });
+        }
+      }
+    });
+    return () => scope.revert();
+  }, [status]);
 
   if (status === 'loading') return <div className="grid min-h-dvh place-items-center bg-background"><LoadingState /></div>;
   if (status === 'authenticated') return <Navigate replace to={destination} />;
@@ -34,17 +87,17 @@ export function LoginPage() {
   }
 
   return (
-    <main className="login-modern-shell">
+    <main ref={motionRoot} className="login-modern-shell">
       <section className="login-visual-panel">
         <img src={ditherArtwork} alt="" className="login-dither-art" aria-hidden="true" />
         <div className="login-dither-tint" />
         <div className="login-visual-grid" />
         <div className="login-visual-brand"><div className="grid size-9 place-items-center rounded-lg bg-white/14 text-white ring-1 ring-white/20"><Sparkles className="size-[18px]" /></div><div><div className="text-sm font-semibold text-white">Decision Tracer</div><div className="text-[11px] text-white/60">Entity matching workspace</div></div></div>
         <div className="login-visual-copy">
-          <div className="login-visual-kicker">Operational clarity for every match</div>
-          <h1>Trace decisions.<br />Resolve ambiguity.</h1>
-          <p>Follow entity outcomes from source evidence to final resolution in one focused workspace.</p>
-          <div className="login-capability-row">{['Decision evidence', 'Human review', 'Cost visibility'].map((item) => <span key={item}><Check className="size-3" />{item}</span>)}</div>
+          <div className="login-visual-kicker login-motion-support">Operational clarity for every match</div>
+          <h1><span className="login-motion-line">Trace decisions.</span><span className="login-motion-line">Resolve ambiguity.</span></h1>
+          <p className="login-motion-support">Follow entity outcomes from source evidence to final resolution in one focused workspace.</p>
+          <div className="login-capability-row">{['Decision evidence', 'Human review', 'Cost visibility'].map((item) => <span className="login-motion-support" key={item}><Check className="size-3" />{item}</span>)}</div>
         </div>
         <div className="login-visual-foot">Internal system / Authorized access only</div>
       </section>

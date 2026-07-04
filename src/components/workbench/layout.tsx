@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 export function PageContainer({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('mx-auto w-full max-w-[1480px] px-4 py-4 sm:px-5 lg:px-5 lg:py-5', className)} {...props} />;
+  return <div data-motion-page className={cn('mx-auto w-full max-w-[1480px] px-4 py-4 sm:px-5 lg:px-5 lg:py-5', className)} {...props} />;
 }
 
 export function PageHeader({
