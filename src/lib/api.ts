@@ -27,8 +27,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return requestApiJson<T>(INSIGHTS_API_BASE_URL, path, init);
 }
 
-export async function getRuns() {
-  const runs = await request<InsightsRunListItem[]>('/runs');
+export async function getRuns(params: {
+  query?: string;
+  limit?: number;
+  signal?: AbortSignal;
+} = {}) {
+  const search = new URLSearchParams({ limit: String(params.limit ?? 100) });
+  if (params.query?.trim()) search.set('query', params.query.trim());
+  const runs = await request<InsightsRunListItem[]>(`/runs?${search.toString()}`, {
+    signal: params.signal,
+  });
   return runs.map((run) => run.run_id);
 }
 

@@ -1,9 +1,11 @@
 import { useDeferredValue, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as Popover from '@radix-ui/react-popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { getRuns } from '@/lib/api';
 
 export function RunSelector({
   runs,
@@ -19,8 +21,17 @@ export function RunSelector({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
-  const filteredRuns = deferredQuery
+  const localMatches = deferredQuery
     ? runs.filter((run) => run.toLowerCase().includes(deferredQuery))
+    : runs;
+  const searchQuery = useQuery({
+    queryKey: ['runs', 'search', deferredQuery],
+    queryFn: ({ signal }) => getRuns({ query: deferredQuery, limit: 100, signal }),
+    enabled: open && Boolean(deferredQuery),
+    staleTime: 30_000,
+  });
+  const filteredRuns = deferredQuery
+    ? searchQuery.data ?? localMatches
     : runs;
 
   return (
@@ -44,7 +55,8 @@ export function RunSelector({
                 <span className="truncate">{run}</span>
               </button>
             ))}
-            {filteredRuns.length === 0 && <div className="px-3 py-8 text-center text-sm text-muted-foreground">No matching runs</div>}
+            {searchQuery.isFetching && deferredQuery && <div className="px-3 py-2 text-center text-xs text-muted-foreground">Searching all runs…</div>}
+            {!searchQuery.isFetching && filteredRuns.length === 0 && <div className="px-3 py-8 text-center text-sm text-muted-foreground">No matching runs</div>}
           </div>
         </Popover.Content>
       </Popover.Portal>

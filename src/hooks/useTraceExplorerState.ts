@@ -130,7 +130,7 @@ export function useTraceExplorerState() {
 
   const runsQuery = useQuery({
     queryKey: ['runs'],
-    queryFn: getRuns,
+    queryFn: ({ signal }) => getRuns({ signal }),
     staleTime: 60_000,
     gcTime: 5 * 60_000,
   });
@@ -140,19 +140,10 @@ export function useTraceExplorerState() {
       setSelectedRunId(runsQuery.data[0]);
       return;
     }
-    if (selectedRunId && runsQuery.data?.length && !runsQuery.data.includes(selectedRunId)) {
-      setSelectedRunId(runsQuery.data[0]);
-      setSelectedModule('');
-      setSelectedUniqueId('');
-      setSelectedReviewCaseId('');
-    }
   }, [
     runsQuery.data,
     selectedRunId,
-    setSelectedModule,
-    setSelectedReviewCaseId,
     setSelectedRunId,
-    setSelectedUniqueId,
   ]);
 
   const summaryQuery = useQuery({
